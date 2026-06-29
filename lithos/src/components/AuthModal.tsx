@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { X, Mail, Lock, User, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { useGoogleLogin } from "@react-oauth/google";
+import { supabase } from "../lib/supabase";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -14,7 +15,7 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string; name?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string; name?: string; general?: string }>({});
   const [loading, setLoading] = useState(false);
 
   // Form Validation
@@ -37,22 +38,63 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
     return Object.keys(tempErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
 
     setLoading(true);
-    // Simulate authenticating against a backend database
-    setTimeout(() => {
+    setErrors({});
+
+    try {
+      if (isSignUp) {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: name,
+              avatar_url: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(email)}`,
+            },
+          },
+        });
+
+        if (error) throw error;
+
+        if (data.session) {
+          onLoginSuccess({
+            name: data.user?.user_metadata.full_name || name,
+            email: data.user?.email || email,
+            avatarUrl: data.user?.user_metadata.avatar_url,
+          });
+          onClose();
+          resetForm();
+        } else {
+          setErrors({ general: "Sign up successful! Please check your email for the confirmation link." });
+        }
+      } else {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) throw error;
+
+        if (data.user) {
+          onLoginSuccess({
+            name: data.user.user_metadata.full_name || data.user.email?.split("@")[0] || "User",
+            email: data.user.email || email,
+            avatarUrl: data.user.user_metadata.avatar_url,
+          });
+          onClose();
+          resetForm();
+        }
+      }
+    } catch (err: any) {
+      console.error("Auth error:", err);
+      setErrors({ general: err.message || "An authentication error occurred. Please try again." });
+    } finally {
       setLoading(false);
-      onLoginSuccess({
-        name: isSignUp ? name : email.split("@")[0],
-        email: email,
-        avatarUrl: `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(email)}`,
-      });
-      onClose();
-      resetForm();
-    }, 1200);
+    }
   };
 
   const resetForm = () => {
@@ -162,6 +204,12 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
 
         {/* Auth Forms */}
         <form onSubmit={handleSubmit} className="space-y-4">
+          {errors.general && (
+            <div className="bg-red-500/10 border border-red-500/30 text-red-200 text-xs rounded-xl p-3 flex items-start gap-2.5">
+              <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-400" />
+              <span>{errors.general}</span>
+            </div>
+          )}
           {/* Name Field (Sign Up Only) */}
           {isSignUp && (
             <div>

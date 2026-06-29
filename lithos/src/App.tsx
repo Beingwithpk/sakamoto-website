@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Menu, X, LogOut, ShoppingBag, Heart } from "lucide-react";
+import { supabase } from "./lib/supabase";
 import RevealLayer from "./components/RevealLayer";
 import MarqueeTicker from "./components/MarqueeTicker";
 import FeaturedCollections from "./components/FeaturedCollections";
@@ -25,6 +26,7 @@ const NAV_LINKS = [
 ];
 
 interface User {
+  id?: string;
   name: string;
   email: string;
   avatarUrl?: string;
@@ -80,6 +82,146 @@ export default function App() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Track latest cart and wishlist items using refs to avoid stale closures in auth subscription
+  const cartRef = useRef<CartItem[]>([]);
+  const wishlistRef = useRef<WishlistItem[]>([]);
+  useEffect(() => {
+    cartRef.current = cartItems;
+  }, [cartItems]);
+  useEffect(() => {
+    wishlistRef.current = wishlistItems;
+  }, [wishlistItems]);
+
+  // Sync Supabase Cart & Wishlist with local state on login
+  const syncUserDataOnLogin = async (userId: string) => {
+    try {
+      // 1. Fetch Cart from Supabase
+      const { data: dbCart, error: cartError } = await supabase
+        .from("cart_items")
+        .select("*")
+        .eq("user_id", userId);
+
+      if (cartError) throw cartError;
+
+      // 2. Fetch Wishlist from Supabase
+      const { data: dbWishlist, error: wishlistError } = await supabase
+        .from("wishlist_items")
+        .select("*")
+        .eq("user_id", userId);
+
+      if (wishlistError) throw wishlistError;
+
+      const currentCart = cartRef.current;
+      const currentWishlist = wishlistRef.current;
+
+      // Merge Carts
+      let mergedCart = dbCart.map(item => ({
+        id: item.product_id,
+        name: item.name,
+        price: Number(item.price),
+        image: item.image,
+        category: item.category,
+        quantity: item.quantity,
+      }));
+
+      if (currentCart.length > 0) {
+        for (const localItem of currentCart) {
+          const existingDb = dbCart.find(db => db.product_id === localItem.id);
+          if (existingDb) {
+            const newQty = existingDb.quantity + localItem.quantity;
+            await supabase
+              .from("cart_items")
+              .update({ quantity: newQty })
+              .eq("user_id", userId)
+              .eq("product_id", localItem.id);
+            
+            mergedCart = mergedCart.map(c => c.id === localItem.id ? { ...c, quantity: newQty } : c);
+          } else {
+            await supabase
+              .from("cart_items")
+              .insert({
+                user_id: userId,
+                product_id: localItem.id,
+                name: localItem.name,
+                price: localItem.price,
+                image: localItem.image,
+                category: localItem.category,
+                quantity: localItem.quantity,
+              });
+            mergedCart.push(localItem);
+          }
+        }
+      }
+      setCartItems(mergedCart);
+
+      // Merge Wishlists
+      let mergedWishlist = dbWishlist.map(item => ({
+        id: item.product_id,
+        name: item.name,
+        price: Number(item.price),
+        image: item.image,
+        category: item.category,
+      }));
+
+      if (currentWishlist.length > 0) {
+        for (const localItem of currentWishlist) {
+          const existingDb = dbWishlist.find(db => db.product_id === localItem.id);
+          if (!existingDb) {
+            await supabase
+              .from("wishlist_items")
+              .insert({
+                user_id: userId,
+                product_id: localItem.id,
+                name: localItem.name,
+                price: localItem.price,
+                image: localItem.image,
+                category: localItem.category,
+              });
+            mergedWishlist.push(localItem);
+          }
+        }
+      }
+      setWishlistItems(mergedWishlist);
+    } catch (err) {
+      console.error("Error syncing user data from Supabase:", err);
+    }
+  };
+
+  // Session & Auth state listener
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          name: session.user.user_metadata.full_name || session.user.email?.split("@")[0] || "User",
+          email: session.user.email || "",
+          avatarUrl: session.user.user_metadata.avatar_url,
+        });
+        syncUserDataOnLogin(session.user.id);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          name: session.user.user_metadata.full_name || session.user.email?.split("@")[0] || "User",
+          email: session.user.email || "",
+          avatarUrl: session.user.user_metadata.avatar_url,
+        });
+        syncUserDataOnLogin(session.user.id);
+      } else {
+        setUser(null);
+        setCartItems([]);
+        setWishlistItems([]);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   /* ── Helper: Scroll to Section ── */
   const scrollToSection = (id: string) => {
     setActiveNav(id);
@@ -97,7 +239,7 @@ export default function App() {
   };
 
   /* ── Commerce Handler: Cart ── */
-  const handleAddToCart = (product: Product | Accessory) => {
+  const handleAddToCart = async (product: Product | Accessory) => {
     setCartItems((prev) => {
       const exists = prev.find((item) => item.id === product.id);
       if (exists) {
@@ -118,33 +260,113 @@ export default function App() {
       ];
     });
     setIsCartOpen(true); // Open drawer on addition
+
+    if (user?.id) {
+      try {
+        const { data } = await supabase
+          .from("cart_items")
+          .select("quantity")
+          .eq("user_id", user.id)
+          .eq("product_id", product.id)
+          .maybeSingle();
+
+        if (data) {
+          await supabase
+            .from("cart_items")
+            .update({ quantity: data.quantity + 1 })
+            .eq("user_id", user.id)
+            .eq("product_id", product.id);
+        } else {
+          await supabase
+            .from("cart_items")
+            .insert({
+              user_id: user.id,
+              product_id: product.id,
+              name: product.name,
+              price: product.price,
+              image: product.image,
+              category: product.category,
+              quantity: 1,
+            });
+        }
+      } catch (err) {
+        console.error("Failed to sync cart add to Supabase:", err);
+      }
+    }
   };
 
-  const handleUpdateCartQuantity = (id: number, delta: number) => {
+  const handleUpdateCartQuantity = async (id: number, delta: number) => {
     setCartItems((prev) =>
       prev.map((item) =>
         item.id === id ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item
       )
     );
+
+    if (user?.id) {
+      try {
+        const { data } = await supabase
+          .from("cart_items")
+          .select("quantity")
+          .eq("user_id", user.id)
+          .eq("product_id", id)
+          .maybeSingle();
+
+        if (data) {
+          const newQty = Math.max(1, data.quantity + delta);
+          await supabase
+            .from("cart_items")
+            .update({ quantity: newQty })
+            .eq("user_id", user.id)
+            .eq("product_id", id);
+        }
+      } catch (err) {
+        console.error("Failed to update cart quantity in Supabase:", err);
+      }
+    }
   };
 
-  const handleRemoveCartItem = (id: number) => {
+  const handleRemoveCartItem = async (id: number) => {
     setCartItems((prev) => prev.filter((item) => item.id !== id));
+
+    if (user?.id) {
+      try {
+        await supabase
+          .from("cart_items")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("product_id", id);
+      } catch (err) {
+        console.error("Failed to remove item from Supabase cart:", err);
+      }
+    }
   };
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     alert("Checkout initiated! SAKAMOTO order pipeline ready.");
     setCartItems([]);
     setIsCartOpen(false);
+
+    if (user?.id) {
+      try {
+        await supabase
+          .from("cart_items")
+          .delete()
+          .eq("user_id", user.id);
+      } catch (err) {
+        console.error("Failed to clear Supabase cart on checkout:", err);
+      }
+    }
   };
 
   /* ── Commerce Handler: Wishlist ── */
-  const handleToggleWishlist = (product: Product | Accessory) => {
+  const handleToggleWishlist = async (product: Product | Accessory) => {
+    let wasAdded = false;
     setWishlistItems((prev) => {
       const exists = prev.find((item) => item.id === product.id);
       if (exists) {
         return prev.filter((item) => item.id !== product.id);
       }
+      wasAdded = true;
       return [
         ...prev,
         {
@@ -156,6 +378,31 @@ export default function App() {
         },
       ];
     });
+
+    if (user?.id) {
+      try {
+        if (wasAdded) {
+          await supabase
+            .from("wishlist_items")
+            .insert({
+              user_id: user.id,
+              product_id: product.id,
+              name: product.name,
+              price: product.price,
+              image: product.image,
+              category: product.category,
+            });
+        } else {
+          await supabase
+            .from("wishlist_items")
+            .delete()
+            .eq("user_id", user.id)
+            .eq("product_id", product.id);
+        }
+      } catch (err) {
+        console.error("Failed to toggle Supabase wishlist:", err);
+      }
+    }
   };
 
   const handleMoveWishlistToCart = (item: WishlistItem) => {
@@ -167,8 +414,15 @@ export default function App() {
     setUser(userData);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("Error signing out:", err);
+    }
     setUser(null);
+    setCartItems([]);
+    setWishlistItems([]);
     setShowUserDropdown(false);
   };
 
