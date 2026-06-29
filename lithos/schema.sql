@@ -116,8 +116,11 @@ create policy "Users can delete their own wishlist items"
   using (auth.uid() = user_id);
 
 
--- 4. Add is_admin flag to public.profiles table
+-- 4. Add is_admin, phone and shipping_address to public.profiles table
 alter table public.profiles add column if not exists is_admin boolean default false;
+alter table public.profiles add column if not exists phone text;
+alter table public.profiles add column if not exists shipping_address jsonb;
+
 
 
 -- 5. Create products table
@@ -170,4 +173,85 @@ on conflict (id) do nothing;
 
 -- Reset the serial sequence to match the max id
 select setval(pg_get_serial_sequence('public.products', 'id'), coalesce((select max(id) from public.products), 1));
+
+
+-- 6. Create orders table
+create table if not exists public.orders (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users on delete set null,
+  customer_email text not null,
+  customer_name text not null,
+  shipping_address jsonb not null,
+  subtotal numeric not null,
+  shipping_cost numeric not null,
+  total numeric not null,
+  status text default 'paid' not null,
+  payment_method text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Enable RLS on orders
+alter table public.orders enable row level security;
+
+-- Create policies for orders
+create policy "Users can view their own orders"
+  on public.orders for select
+  using (auth.uid() = user_id);
+
+create policy "Allow admins to select all orders"
+  on public.orders for select
+  using (
+    exists (
+      select 1 from public.profiles
+      where profiles.id = auth.uid()
+      and profiles.is_admin = true
+    )
+  );
+
+create policy "Anyone can insert orders"
+  on public.orders for insert
+  with check (true);
+
+
+-- 7. Create order_items table
+create table if not exists public.order_items (
+  id uuid default gen_random_uuid() primary key,
+  order_id uuid references public.orders on delete cascade not null,
+  product_id integer not null,
+  name text not null,
+  price numeric not null,
+  image text not null,
+  category text not null,
+  quantity integer not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Enable RLS on order_items
+alter table public.order_items enable row level security;
+
+-- Create policies for order_items
+create policy "Users can view order items for their own orders"
+  on public.order_items for select
+  using (
+    exists (
+      select 1 from public.orders
+      where orders.id = order_items.order_id
+      and orders.user_id = auth.uid()
+    )
+  );
+
+create policy "Allow admins to select all order items"
+  on public.order_items for select
+  using (
+    exists (
+      select 1 from public.profiles
+      where profiles.id = auth.uid()
+      and profiles.is_admin = true
+    )
+  );
+
+create policy "Anyone can insert order items"
+  on public.order_items for insert
+  with check (true);
+
 

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Menu, X, LogOut, ShoppingBag, Heart } from "lucide-react";
+import { Menu, X, LogOut, ShoppingBag, Heart, Package } from "lucide-react";
 import { supabase } from "./lib/supabase";
 import RevealLayer from "./components/RevealLayer";
 import MarqueeTicker from "./components/MarqueeTicker";
@@ -15,6 +15,9 @@ import Footer from "./components/Footer";
 import AuthModal from "./components/AuthModal";
 import CartDrawer, { type CartItem } from "./components/CartDrawer";
 import WishlistDrawer, { type WishlistItem } from "./components/WishlistDrawer";
+import CheckoutModal from "./components/CheckoutModal";
+import CustomerPortalModal from "./components/CustomerPortalModal";
+
 
 const BG_IMAGE_1 = "/images/hero-base.png";
 const BG_IMAGE_2 = "/images/hero-reveal.png";
@@ -106,6 +109,8 @@ export default function App() {
   /* ── Cart & Wishlist Drawer State ── */
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isWishlistOpen, setIsWishlistOpen] = useState(false);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isCustomerPortalOpen, setIsCustomerPortalOpen] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [wishlistItems, setWishlistItems] = useState<WishlistItem[]>([]);
 
@@ -406,11 +411,13 @@ export default function App() {
     }
   };
 
-  const handleCheckout = async () => {
-    alert("Checkout initiated! SAKAMOTO order pipeline ready.");
-    setCartItems([]);
+  const handleCheckout = () => {
     setIsCartOpen(false);
+    setIsCheckoutOpen(true);
+  };
 
+  const handleOrderSuccess = async () => {
+    setCartItems([]);
     if (user?.id) {
       try {
         await supabase
@@ -418,10 +425,11 @@ export default function App() {
           .delete()
           .eq("user_id", user.id);
       } catch (err) {
-        console.error("Failed to clear Supabase cart on checkout:", err);
+        console.error("Failed to clear Supabase cart on checkout success:", err);
       }
     }
   };
+
 
   /* ── Commerce Handler: Wishlist ── */
   const handleToggleWishlist = async (product: Product | Accessory) => {
@@ -570,6 +578,15 @@ export default function App() {
 
         {/* Right – Actions & Profile */}
         <div className="flex items-center gap-3 sm:gap-4 z-10">
+          {/* Customer Portal Header Indicator */}
+          <button
+            onClick={() => setIsCustomerPortalOpen(true)}
+            className="text-white/70 hover:text-white relative p-1.5 transition-colors"
+            title="Customer Portal"
+          >
+            <Package size={20} />
+          </button>
+
           {/* Wishlist Header Indicator */}
           <button
             onClick={() => setIsWishlistOpen(true)}
@@ -653,6 +670,16 @@ export default function App() {
                           Admin Portal
                         </button>
                       )}
+                       <button
+                        onClick={() => {
+                          setIsCustomerPortalOpen(true);
+                          setShowUserDropdown(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 mt-1.5 text-white/70 hover:text-white hover:bg-white/5 rounded-lg text-sm transition-colors text-left"
+                      >
+                        <Package size={16} className="text-[#e8702a]" />
+                        My Account
+                      </button>
                       <button
                         onClick={handleLogout}
                         className="w-full flex items-center gap-2 px-3 py-2 mt-1.5 text-red-400 hover:bg-red-500/10 rounded-lg text-sm transition-colors text-left"
@@ -729,6 +756,15 @@ export default function App() {
                 Admin Portal
               </button>
             )}
+            <button
+              onClick={() => {
+                setIsCustomerPortalOpen(true);
+                setMobileMenuOpen(false);
+              }}
+              className="text-lg text-white/80 hover:text-white font-medium"
+            >
+              My Account
+            </button>
             <button
               onClick={() => {
                 handleLogout();
@@ -886,6 +922,34 @@ export default function App() {
         items={wishlistItems}
         onRemoveItem={handleToggleWishlist}
         onMoveToCart={handleMoveWishlistToCart}
+      />
+
+      {/* ══════════════ CHECKOUT MODAL ══════════════ */}
+      <CheckoutModal
+        isOpen={isCheckoutOpen}
+        onClose={() => setIsCheckoutOpen(false)}
+        cartItems={cartItems}
+        onOrderSuccess={handleOrderSuccess}
+        userId={user?.id}
+        userEmail={user?.email}
+        userName={user?.name}
+        onViewOrderHistory={() => {
+          setIsCheckoutOpen(false);
+          setIsCustomerPortalOpen(true);
+        }}
+      />
+
+      {/* ══════════════ CUSTOMER PORTAL MODAL ══════════════ */}
+      <CustomerPortalModal
+        isOpen={isCustomerPortalOpen}
+        onClose={() => setIsCustomerPortalOpen(false)}
+        userId={user?.id}
+        userEmail={user?.email}
+        onProfileUpdate={(newName) => {
+          if (user) {
+            setUser({ ...user, name: newName });
+          }
+        }}
       />
     </div>
   );
