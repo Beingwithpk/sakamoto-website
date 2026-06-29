@@ -22,13 +22,16 @@ const PRODUCTS: Product[] = [
 ];
 
 interface ProductGridProps {
+  products: Product[];
   onAddCodeCart: (product: Product) => void;
   onAddCodeWishlist: (product: Product) => void;
   wishlistIds: number[];
 }
 
-export default function ProductGrid({ onAddCodeCart, onAddCodeWishlist, wishlistIds }: ProductGridProps) {
+export default function ProductGrid({ products, onAddCodeCart, onAddCodeWishlist, wishlistIds }: ProductGridProps) {
   const headingRef = useScrollReveal<HTMLDivElement>();
+
+  const displayProducts = products && products.length > 0 ? products : PRODUCTS;
 
   return (
     <section id="Collections" className="bg-[#111111] py-20 sm:py-28 px-5 sm:px-10 md:px-14">
@@ -51,7 +54,7 @@ export default function ProductGrid({ onAddCodeCart, onAddCodeWishlist, wishlist
 
       {/* Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        {PRODUCTS.map((product, i) => (
+        {displayProducts.map((product, i) => (
           <ProductCard
             key={product.id}
             product={product}

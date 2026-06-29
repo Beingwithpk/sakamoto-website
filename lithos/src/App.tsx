@@ -5,6 +5,7 @@ import RevealLayer from "./components/RevealLayer";
 import MarqueeTicker from "./components/MarqueeTicker";
 import FeaturedCollections from "./components/FeaturedCollections";
 import ProductGrid, { type Product } from "./components/ProductGrid";
+import AdminPortal from "./components/AdminPortal";
 import Accessories, { type Accessory } from "./components/Accessories";
 import AboutSection from "./components/AboutSection";
 import StoresSection from "./components/StoresSection";
@@ -30,6 +31,7 @@ interface User {
   name: string;
   email: string;
   avatarUrl?: string;
+  isAdmin?: boolean;
 }
 
 export default function App() {
@@ -67,6 +69,39 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdminView, setIsAdminView] = useState(false);
+
+  /* ── Products list from database ── */
+  const [products, setProducts] = useState<Product[]>([]);
+
+  const fetchProducts = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .order("id", { ascending: true });
+      if (error) throw error;
+      if (data) {
+        const mappedProducts = data.map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          price: Number(item.price),
+          category: item.category,
+          image: item.image,
+          isNew: item.is_new,
+        }));
+        setProducts(mappedProducts);
+      }
+    } catch (err) {
+      console.error("Error fetching products from database:", err);
+    }
+  }, []);
+
+  // Fetch products on mount
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
 
   /* ── Cart & Wishlist Drawer State ── */
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -189,29 +224,59 @@ export default function App() {
 
   // Session & Auth state listener
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
+        let isUserAdmin = false;
+        try {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("is_admin")
+            .eq("id", session.user.id)
+            .maybeSingle();
+          isUserAdmin = !!profile?.is_admin;
+        } catch (err) {
+          console.error("Error checking admin profile on mount:", err);
+        }
+
         setUser({
           id: session.user.id,
           name: session.user.user_metadata.full_name || session.user.email?.split("@")[0] || "User",
           email: session.user.email || "",
           avatarUrl: session.user.user_metadata.avatar_url,
+          isAdmin: isUserAdmin,
         });
+        setIsAdmin(isUserAdmin);
         syncUserDataOnLogin(session.user.id);
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
+        let isUserAdmin = false;
+        try {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("is_admin")
+            .eq("id", session.user.id)
+            .maybeSingle();
+          isUserAdmin = !!profile?.is_admin;
+        } catch (err) {
+          console.error("Error checking admin profile on auth change:", err);
+        }
+
         setUser({
           id: session.user.id,
           name: session.user.user_metadata.full_name || session.user.email?.split("@")[0] || "User",
           email: session.user.email || "",
           avatarUrl: session.user.user_metadata.avatar_url,
+          isAdmin: isUserAdmin,
         });
+        setIsAdmin(isUserAdmin);
         syncUserDataOnLogin(session.user.id);
       } else {
         setUser(null);
+        setIsAdmin(false);
+        setIsAdminView(false);
         setCartItems([]);
         setWishlistItems([]);
       }
@@ -410,8 +475,24 @@ export default function App() {
     handleAddToCart(item); // Add to cart
   };
 
-  const handleLoginSuccess = (userData: User) => {
-    setUser(userData);
+  const handleLoginSuccess = async (userData: User) => {
+    if (userData.id) {
+      let isUserAdmin = false;
+      try {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("is_admin")
+          .eq("id", userData.id)
+          .maybeSingle();
+        isUserAdmin = !!profile?.is_admin;
+      } catch (err) {
+        console.error("Error checking admin status on login:", err);
+      }
+      setUser({ ...userData, isAdmin: isUserAdmin });
+      setIsAdmin(isUserAdmin);
+    } else {
+      setUser(userData);
+    }
   };
 
   const handleLogout = async () => {
@@ -421,6 +502,8 @@ export default function App() {
       console.error("Error signing out:", err);
     }
     setUser(null);
+    setIsAdmin(false);
+    setIsAdminView(false);
     setCartItems([]);
     setWishlistItems([]);
     setShowUserDropdown(false);
@@ -428,6 +511,16 @@ export default function App() {
 
   const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const wishlistCount = wishlistItems.length;
+
+  if (isAdminView && isAdmin) {
+    return (
+      <AdminPortal
+        products={products}
+        onBack={() => setIsAdminView(false)}
+        onRefreshProducts={fetchProducts}
+      />
+    );
+  }
 
   return (
     <div
@@ -545,6 +638,21 @@ export default function App() {
                           {user.email}
                         </p>
                       </div>
+                      {isAdmin && (
+                        <button
+                          onClick={() => {
+                            setIsAdminView(true);
+                            setShowUserDropdown(false);
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 mt-1.5 text-white/70 hover:text-white hover:bg-white/5 rounded-lg text-sm transition-colors text-left border-t border-white/5 pt-2.5"
+                        >
+                          <svg className="w-4 h-4 text-[#e8702a]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          Admin Portal
+                        </button>
+                      )}
                       <button
                         onClick={handleLogout}
                         className="w-full flex items-center gap-2 px-3 py-2 mt-1.5 text-red-400 hover:bg-red-500/10 rounded-lg text-sm transition-colors text-left"
@@ -610,6 +718,17 @@ export default function App() {
               )}
               <span className="text-white text-lg font-medium">{user.name}</span>
             </div>
+            {isAdmin && (
+              <button
+                onClick={() => {
+                  setIsAdminView(true);
+                  setMobileMenuOpen(false);
+                }}
+                className="text-lg text-[#e8702a] font-semibold tracking-wide border border-[#e8702a]/30 px-6 py-2 rounded-full bg-[#e8702a]/5 hover:bg-[#e8702a]/10"
+              >
+                Admin Portal
+              </button>
+            )}
             <button
               onClick={() => {
                 handleLogout();
@@ -715,6 +834,7 @@ export default function App() {
 
       {/* ══════════════ PRODUCT GRID ══════════════ */}
       <ProductGrid
+        products={products}
         onAddCodeCart={handleAddToCart}
         onAddCodeWishlist={handleToggleWishlist}
         wishlistIds={wishlistItems.map((item) => item.id)}

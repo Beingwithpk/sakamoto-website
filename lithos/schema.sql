@@ -114,3 +114,60 @@ create policy "Users can insert their own wishlist items"
 create policy "Users can delete their own wishlist items"
   on public.wishlist_items for delete
   using (auth.uid() = user_id);
+
+
+-- 4. Add is_admin flag to public.profiles table
+alter table public.profiles add column if not exists is_admin boolean default false;
+
+
+-- 5. Create products table
+create table if not exists public.products (
+  id serial primary key,
+  name text not null,
+  price numeric not null,
+  category text not null,
+  image text not null,
+  is_new boolean default false,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Enable RLS on products
+alter table public.products enable row level security;
+
+-- Create policies for products
+create policy "Allow public read access to products"
+  on public.products for select
+  using (true);
+
+create policy "Allow admin to manage products"
+  on public.products for all
+  using (
+    exists (
+      select 1 from public.profiles
+      where profiles.id = auth.uid()
+      and profiles.is_admin = true
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.profiles
+      where profiles.id = auth.uid()
+      and profiles.is_admin = true
+    )
+  );
+
+-- Seed initial products if the table is empty
+insert into public.products (id, name, price, category, image, is_new) values
+  (1, 'Oversized Essential Tee', 3999, 'Tops', '/images/product-tee-black.png', true),
+  (2, 'Heavyweight Hoodie', 7999, 'Outerwear', '/images/product-hoodie.png', true),
+  (3, 'Utility Cargo Pants', 6499, 'Bottoms', '/images/product-cargo.png', false),
+  (4, 'Bomber Jacket', 12999, 'Outerwear', '/images/product-jacket.png', true),
+  (5, 'Kanji Print Tee', 4299, 'Tops', '/images/product-tee-white.png', false),
+  (6, 'Wide-Leg Trousers', 5999, 'Bottoms', '/images/product-pants.png', false),
+  (7, 'Canvas Overshirt', 8499, 'Outerwear', '/images/product-overshirt.png', true),
+  (8, 'Merino Knit Sweater', 9999, 'Knitwear', '/images/product-knit.png', false)
+on conflict (id) do nothing;
+
+-- Reset the serial sequence to match the max id
+select setval(pg_get_serial_sequence('public.products', 'id'), coalesce((select max(id) from public.products), 1));
+
