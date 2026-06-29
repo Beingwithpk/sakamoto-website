@@ -91,7 +91,11 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
       }
     } catch (err: any) {
       console.error("Auth error:", err);
-      setErrors({ general: err.message || "An authentication error occurred. Please try again." });
+      let msg = err.message || "An authentication error occurred. Please try again.";
+      if (msg === "{}" || msg.includes("fetch")) {
+        msg = "Database or connection error. Please verify that you have successfully executed the SQL triggers in your Supabase SQL Editor (check schema.sql).";
+      }
+      setErrors({ general: msg });
     } finally {
       setLoading(false);
     }
