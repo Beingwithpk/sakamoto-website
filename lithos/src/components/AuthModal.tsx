@@ -92,9 +92,16 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
     } catch (err: any) {
       console.error("Auth error:", err);
       let msg = err.message || "An authentication error occurred. Please try again.";
-      if (msg === "{}" || msg.includes("fetch")) {
-        msg = "Database or connection error. Please verify that you have successfully executed the SQL triggers in your Supabase SQL Editor (check schema.sql).";
+      
+      // Handle specific Supabase Auth errors
+      if (err.status === 429 || msg.toLowerCase().includes("rate limit")) {
+        msg = "Too many sign up attempts. Please try again later or use a different email address. (Supabase Rate Limit)";
+      } else if (msg.includes("email_address_invalid") || msg.toLowerCase().includes("invalid email")) {
+        msg = "Supabase rejected this email address. Please use a real email domain (e.g. @gmail.com).";
+      } else if (msg === "{}" || msg.includes("fetch") || msg.includes("AuthRetryableFetchError")) {
+        msg = "Network/connection error, or your email domain was blocked by Supabase. Please use a real email like @gmail.com.";
       }
+      
       setErrors({ general: msg });
     } finally {
       setLoading(false);
