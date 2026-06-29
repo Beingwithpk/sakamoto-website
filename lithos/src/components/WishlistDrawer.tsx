@@ -12,7 +12,7 @@ interface WishlistDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   items: WishlistItem[];
-  onRemoveItem: (id: number) => void;
+  onRemoveItem: (item: WishlistItem) => void;
   onMoveToCart: (item: WishlistItem) => void;
 }
 
@@ -109,7 +109,7 @@ export default function WishlistDrawer({
                     </button>
 
                     <button
-                      onClick={() => onRemoveItem(item.id)}
+                      onClick={() => onRemoveItem(item)}
                       className="text-white/30 hover:text-red-400 p-1.5 transition-colors"
                       title="Remove from wishlist"
                     >

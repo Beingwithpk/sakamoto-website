@@ -453,7 +453,11 @@ export default function App() {
       <MarqueeTicker />
 
       {/* ══════════════ FEATURED COLLECTIONS ══════════════ */}
-      <FeaturedCollections />
+      <FeaturedCollections
+        onAddCodeCart={handleAddToCart}
+        onAddCodeWishlist={handleToggleWishlist}
+        wishlistIds={wishlistItems.map((item) => item.id)}
+      />
 
       {/* ══════════════ PRODUCT GRID ══════════════ */}
       <ProductGrid
