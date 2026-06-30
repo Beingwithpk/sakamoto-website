@@ -9,17 +9,84 @@ export default function ContactSection() {
   const [message, setMessage] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const headingRef = useScrollReveal<HTMLDivElement>();
   const formRef = useScrollReveal<HTMLDivElement>();
   const infoRef = useScrollReveal<HTMLDivElement>();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !email || !message) return;
 
     setLoading(true);
-    setTimeout(() => {
+    setErrorMsg(null);
+
+    const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID || "service_xtg5319";
+    const adminTemplateId = import.meta.env.VITE_EMAILJS_ADMIN_TEMPLATE_ID;
+    const replyTemplateId = import.meta.env.VITE_EMAILJS_REPLY_TEMPLATE_ID;
+    const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY;
+
+    if (!adminTemplateId || !publicKey) {
+      console.warn("EmailJS template ID or public key is not configured in environment variables.");
+      // Fallback behavior if environment variables are not set yet
+      setTimeout(() => {
+        setLoading(false);
+        setSubmitted(true);
+        setName("");
+        setEmail("");
+        setSubject("");
+        setMessage("");
+        setTimeout(() => setSubmitted(false), 5000);
+      }, 1200);
+      return;
+    }
+
+    try {
+      // 1. Send admin notification email
+      const adminRes = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          service_id: serviceId,
+          template_id: adminTemplateId,
+          user_id: publicKey,
+          template_params: {
+            from_name: name,
+            from_email: email,
+            subject: subject || "No Subject",
+            message: message,
+            to_email: "pranjalkhandelwal46@gmail.com",
+          },
+        }),
+      });
+
+      if (!adminRes.ok) {
+        const errText = await adminRes.text();
+        throw new Error(`Admin email dispatch failed: ${errText}`);
+      }
+
+      // 2. Send customer auto-reply email (if configured)
+      if (replyTemplateId) {
+        const replyRes = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            service_id: serviceId,
+            template_id: replyTemplateId,
+            user_id: publicKey,
+            template_params: {
+              to_name: name,
+              to_email: email,
+            },
+          }),
+        });
+
+        if (!replyRes.ok) {
+          console.warn("Auto-reply template failed to send, but admin notification succeeded.");
+        }
+      }
+
       setLoading(false);
       setSubmitted(true);
       setName("");
@@ -27,7 +94,12 @@ export default function ContactSection() {
       setSubject("");
       setMessage("");
       setTimeout(() => setSubmitted(false), 5000);
-    }, 1500);
+
+    } catch (err: any) {
+      console.error("EmailJS sending error:", err);
+      setErrorMsg("Failed to transmit message. Please verify template keys or try again later.");
+      setLoading(false);
+    }
   };
 
   return (
@@ -80,6 +152,12 @@ export default function ContactSection() {
           <div ref={formRef} className="lg:col-span-7 scroll-fade-in scroll-fade-right">
             <div className="bg-white/5 border border-white/10 backdrop-blur-md rounded-2xl p-6 sm:p-8">
               <h3 className="text-white text-xl font-light mb-6">Send a Message</h3>
+
+              {errorMsg && (
+                <div className="mb-5 bg-red-500/10 border border-red-500/20 text-red-200 text-sm rounded-xl p-4">
+                  <p>{errorMsg}</p>
+                </div>
+              )}
 
               {submitted ? (
                 <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-6 text-center space-y-3 animate-modal-scale">
