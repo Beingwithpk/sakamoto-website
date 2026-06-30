@@ -93,6 +93,7 @@ export default function App() {
           category: item.category,
           image: item.image,
           isNew: item.is_new,
+          stock_quantity: item.stock_quantity !== undefined ? Number(item.stock_quantity) : 10,
         }));
         setProducts(mappedProducts);
       }
@@ -310,6 +311,21 @@ export default function App() {
 
   /* ── Commerce Handler: Cart ── */
   const handleAddToCart = async (product: Product | Accessory) => {
+    const targetProduct = products.find((p) => p.id === product.id);
+    const stockQty = targetProduct?.stock_quantity !== undefined ? targetProduct.stock_quantity : 10;
+
+    if (stockQty <= 0) {
+      alert(`"${product.name}" is currently out of stock.`);
+      return;
+    }
+
+    const inCart = cartItems.find((item) => item.id === product.id);
+    const currentQty = inCart ? inCart.quantity : 0;
+    if (currentQty + 1 > stockQty) {
+      alert(`Cannot add more items. Only ${stockQty} items left in stock.`);
+      return;
+    }
+
     setCartItems((prev) => {
       const exists = prev.find((item) => item.id === product.id);
       if (exists) {
@@ -366,9 +382,22 @@ export default function App() {
   };
 
   const handleUpdateCartQuantity = async (id: number, delta: number) => {
+    const targetProduct = products.find((p) => p.id === id);
+    const stockQty = targetProduct?.stock_quantity !== undefined ? targetProduct.stock_quantity : 10;
+
+    const inCart = cartItems.find((item) => item.id === id);
+    if (!inCart) return;
+
+    const newQty = Math.max(1, inCart.quantity + delta);
+
+    if (delta > 0 && newQty > stockQty) {
+      alert(`Cannot add more items. Only ${stockQty} items left in stock.`);
+      return;
+    }
+
     setCartItems((prev) =>
       prev.map((item) =>
-        item.id === id ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item
+        item.id === id ? { ...item, quantity: newQty } : item
       )
     );
 
@@ -382,10 +411,10 @@ export default function App() {
           .maybeSingle();
 
         if (data) {
-          const newQty = Math.max(1, data.quantity + delta);
+          const dbNewQty = Math.max(1, data.quantity + delta);
           await supabase
             .from("cart_items")
-            .update({ quantity: newQty })
+            .update({ quantity: dbNewQty })
             .eq("user_id", user.id)
             .eq("product_id", id);
         }

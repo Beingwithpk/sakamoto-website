@@ -19,6 +19,7 @@ export default function AdminPortal({ products, onBack, onRefreshProducts }: Adm
   const [category, setCategory] = useState("Tops");
   const [image, setImage] = useState("");
   const [isNew, setIsNew] = useState(false);
+  const [stock, setStock] = useState("10");
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +34,7 @@ export default function AdminPortal({ products, onBack, onRefreshProducts }: Adm
     setCategory("Tops");
     setImage("");
     setIsNew(false);
+    setStock("10");
     setError(null);
     setSuccessMsg(null);
     setIsModalOpen(true);
@@ -45,6 +47,7 @@ export default function AdminPortal({ products, onBack, onRefreshProducts }: Adm
     setCategory(product.category);
     setImage(product.image);
     setIsNew(!!product.isNew);
+    setStock(product.stock_quantity !== undefined ? product.stock_quantity.toString() : "10");
     setError(null);
     setSuccessMsg(null);
     setIsModalOpen(true);
@@ -52,7 +55,7 @@ export default function AdminPortal({ products, onBack, onRefreshProducts }: Adm
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !price || !category.trim() || !image.trim()) {
+    if (!name.trim() || !price || !category.trim() || !image.trim() || stock === "") {
       setError("All fields are required.");
       return;
     }
@@ -60,6 +63,12 @@ export default function AdminPortal({ products, onBack, onRefreshProducts }: Adm
     const priceNum = parseFloat(price);
     if (isNaN(priceNum) || priceNum <= 0) {
       setError("Please enter a valid price.");
+      return;
+    }
+
+    const stockNum = parseInt(stock, 10);
+    if (isNaN(stockNum) || stockNum < 0) {
+      setError("Please enter a valid stock quantity.");
       return;
     }
 
@@ -73,6 +82,7 @@ export default function AdminPortal({ products, onBack, onRefreshProducts }: Adm
       category,
       image,
       is_new: isNew,
+      stock_quantity: stockNum,
     };
 
     try {
@@ -198,6 +208,7 @@ export default function AdminPortal({ products, onBack, onRefreshProducts }: Adm
                     <th className="px-6 py-4">Product Info</th>
                     <th className="px-6 py-4">Category</th>
                     <th className="px-6 py-4">Price</th>
+                    <th className="px-6 py-4">Stock</th>
                     <th className="px-6 py-4">Badges</th>
                     <th className="px-6 py-4 text-right">Actions</th>
                   </tr>
@@ -236,6 +247,11 @@ export default function AdminPortal({ products, onBack, onRefreshProducts }: Adm
                       {/* Price */}
                       <td className="px-6 py-4 font-semibold text-white/90">
                         ₹{product.price.toLocaleString("en-IN")}
+                      </td>
+
+                      {/* Stock */}
+                      <td className="px-6 py-4 text-white/70">
+                        {product.stock_quantity !== undefined ? product.stock_quantity : 10}
                       </td>
 
                       {/* Badges */}
@@ -313,7 +329,7 @@ export default function AdminPortal({ products, onBack, onRefreshProducts }: Adm
                 />
               </div>
 
-              {/* Price & Category */}
+              {/* Price & Stock */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">
@@ -331,27 +347,43 @@ export default function AdminPortal({ products, onBack, onRefreshProducts }: Adm
                 </div>
                 <div>
                   <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">
-                    Category
+                    Stock Quantity
                   </label>
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
+                  <input
+                    type="number"
+                    placeholder="e.g. 10"
+                    value={stock}
+                    onChange={(e) => setStock(e.target.value)}
                     disabled={loading}
-                    className="w-full bg-white/5 border border-white/10 text-white text-sm rounded-xl px-4 py-3 outline-none focus:border-[#e8702a] transition-all appearance-none"
-                    style={{
-                      backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")`,
-                      backgroundPosition: 'right 1rem center',
-                      backgroundSize: '1.25em 1.25em',
-                      backgroundRepeat: 'no-repeat'
-                    }}
-                  >
-                    {categories.map((cat) => (
-                      <option key={cat} value={cat} className="bg-[#0e0e0e] text-white">
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
+                    className="w-full bg-white/5 border border-white/10 text-white text-sm rounded-xl px-4 py-3 outline-none focus:border-[#e8702a] transition-all"
+                    required
+                  />
                 </div>
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">
+                  Category
+                </label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  disabled={loading}
+                  className="w-full bg-white/5 border border-white/10 text-white text-sm rounded-xl px-4 py-3 outline-none focus:border-[#e8702a] transition-all appearance-none"
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3E%3C/svg%3E")`,
+                    backgroundPosition: 'right 1rem center',
+                    backgroundSize: '1.25em 1.25em',
+                    backgroundRepeat: 'no-repeat'
+                  }}
+                >
+                  {categories.map((cat) => (
+                    <option key={cat} value={cat} className="bg-[#0e0e0e] text-white">
+                      {cat}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Image URL */}

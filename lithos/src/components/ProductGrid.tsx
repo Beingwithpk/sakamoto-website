@@ -8,17 +8,18 @@ export interface Product {
   category: string;
   image: string;
   isNew?: boolean;
+  stock_quantity?: number;
 }
 
 const PRODUCTS: Product[] = [
-  { id: 1, name: "Oversized Essential Tee", price: 3999, category: "Tops", image: "/images/product-tee-black.png", isNew: true },
-  { id: 2, name: "Heavyweight Hoodie", price: 7999, category: "Outerwear", image: "/images/product-hoodie.png", isNew: true },
-  { id: 3, name: "Utility Cargo Pants", price: 6499, category: "Bottoms", image: "/images/product-cargo.png" },
-  { id: 4, name: "Bomber Jacket", price: 12999, category: "Outerwear", image: "/images/product-jacket.png", isNew: true },
-  { id: 5, name: "Kanji Print Tee", price: 4299, category: "Tops", image: "/images/product-tee-white.png" },
-  { id: 6, name: "Wide-Leg Trousers", price: 5999, category: "Bottoms", image: "/images/product-pants.png" },
-  { id: 7, name: "Canvas Overshirt", price: 8499, category: "Outerwear", image: "/images/product-overshirt.png", isNew: true },
-  { id: 8, name: "Merino Knit Sweater", price: 9999, category: "Knitwear", image: "/images/product-knit.png" },
+  { id: 1, name: "Oversized Essential Tee", price: 3999, category: "Tops", image: "/images/product-tee-black.png", isNew: true, stock_quantity: 12 },
+  { id: 2, name: "Heavyweight Hoodie", price: 7999, category: "Outerwear", image: "/images/product-hoodie.png", isNew: true, stock_quantity: 8 },
+  { id: 3, name: "Utility Cargo Pants", price: 6499, category: "Bottoms", image: "/images/product-cargo.png", stock_quantity: 15 },
+  { id: 4, name: "Bomber Jacket", price: 12999, category: "Outerwear", image: "/images/product-jacket.png", isNew: true, stock_quantity: 0 },
+  { id: 5, name: "Kanji Print Tee", price: 4299, category: "Tops", image: "/images/product-tee-white.png", stock_quantity: 6 },
+  { id: 6, name: "Wide-Leg Trousers", price: 5999, category: "Bottoms", image: "/images/product-pants.png", stock_quantity: 2 },
+  { id: 7, name: "Canvas Overshirt", price: 8499, category: "Outerwear", image: "/images/product-overshirt.png", isNew: true, stock_quantity: 10 },
+  { id: 8, name: "Merino Knit Sweater", price: 9999, category: "Knitwear", image: "/images/product-knit.png", stock_quantity: 14 },
 ];
 
 interface ProductGridProps {
@@ -79,6 +80,7 @@ interface ProductCardProps {
 
 function ProductCard({ product, delay, onAddCart, onAddWishlist, isWishlisted }: ProductCardProps) {
   const ref = useScrollReveal<HTMLDivElement>(0.05);
+  const stock = product.stock_quantity !== undefined ? product.stock_quantity : 10;
 
   return (
     <div
@@ -97,37 +99,68 @@ function ProductCard({ product, delay, onAddCart, onAddWishlist, isWishlisted }:
 
         {/* New badge */}
         {product.isNew && (
-          <span className="absolute top-3 left-3 bg-[#e8702a] text-white text-[10px] font-bold tracking-[0.1em] uppercase px-2.5 py-1 rounded-full">
+          <span className="absolute top-3 left-3 bg-[#e8702a] text-white text-[10px] font-bold tracking-[0.1em] uppercase px-2.5 py-1 rounded-full animate-pulse">
             New
           </span>
         )}
 
+        {/* Sold out badge */}
+        {stock === 0 && (
+          <span className="absolute top-3 right-3 bg-red-600 text-white text-[9px] font-bold tracking-[0.15em] uppercase px-2.5 py-1 rounded-full shadow-lg border border-red-500/25">
+            Sold Out
+          </span>
+        )}
+
         {/* Hover overlay */}
-        <div className="product-overlay absolute inset-0 bg-black/40 flex items-center justify-center gap-3">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onAddCart(product);
-            }}
-            className="bg-white text-gray-900 rounded-full p-3 hover:scale-110 transition-transform active:scale-95"
-            title="Add to bag"
-          >
-            <ShoppingBag size={18} />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onAddWishlist(product);
-            }}
-            className={`rounded-full p-3 hover:scale-110 transition-transform active:scale-95 ${
-              isWishlisted
-                ? "bg-[#e8702a] text-white border border-[#e8702a]"
-                : "bg-white/20 backdrop-blur-sm text-white border border-white/30"
-            }`}
-            title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
-          >
-            <Heart size={18} className={isWishlisted ? "fill-white" : ""} />
-          </button>
+        <div className="product-overlay absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-2.5 text-center p-4">
+          {stock > 0 ? (
+            <div className="flex gap-3">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddCart(product);
+                }}
+                className="bg-white text-gray-900 rounded-full p-3 hover:scale-110 transition-transform active:scale-95"
+                title="Add to bag"
+              >
+                <ShoppingBag size={18} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddWishlist(product);
+                }}
+                className={`rounded-full p-3 hover:scale-110 transition-transform active:scale-95 ${
+                  isWishlisted
+                    ? "bg-[#e8702a] text-white border border-[#e8702a]"
+                    : "bg-white/20 backdrop-blur-sm text-white border border-white/30"
+                }`}
+                title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+              >
+                <Heart size={18} className={isWishlisted ? "fill-white" : ""} />
+              </button>
+            </div>
+          ) : (
+            <>
+              <span className="text-white text-xs font-semibold uppercase tracking-wider bg-red-600/80 px-3.5 py-1.5 rounded-full border border-red-500/25 shadow-md">
+                Sold Out
+              </span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddWishlist(product);
+                }}
+                className={`rounded-full p-2.5 hover:scale-115 transition-transform active:scale-90 ${
+                  isWishlisted
+                    ? "bg-[#e8702a] text-white"
+                    : "bg-white/10 text-white border border-white/15"
+                }`}
+                title={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+              >
+                <Heart size={14} className={isWishlisted ? "fill-white" : ""} />
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -138,9 +171,16 @@ function ProductCard({ product, delay, onAddCart, onAddWishlist, isWishlisted }:
       <h3 className="text-white text-sm font-medium mb-1 group-hover:text-[#e8702a] transition-colors">
         {product.name}
       </h3>
-      <p className="text-white/75 text-sm font-semibold">
-        ₹{product.price.toLocaleString("en-IN")}
-      </p>
+      <div className="flex items-center justify-between">
+        <p className="text-white/75 text-sm font-semibold">
+          ₹{product.price.toLocaleString("en-IN")}
+        </p>
+        {stock > 0 && stock <= 3 && (
+          <span className="text-[10px] text-amber-400 font-medium px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 animate-pulse">
+            Only {stock} left!
+          </span>
+        )}
+      </div>
     </div>
   );
 }

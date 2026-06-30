@@ -255,3 +255,8 @@ create policy "Anyone can insert order items"
   with check (true);
 
 
+-- 8. Add stock_quantity to products table
+alter table public.products add column if not exists stock_quantity integer default 10;
+
+
+

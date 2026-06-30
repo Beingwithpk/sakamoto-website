@@ -139,9 +139,33 @@ export default function CheckoutModal({
           .insert(orderItemsPayload);
 
         if (itemsError) throw itemsError;
+
+        // 3. Decrement stock in Supabase products table
+        for (const item of cartItems) {
+          try {
+            const { data: prodData } = await supabase
+              .from("products")
+              .select("stock_quantity")
+              .eq("id", item.id)
+              .maybeSingle();
+
+            if (prodData) {
+              const currentStock = prodData.stock_quantity !== undefined && prodData.stock_quantity !== null
+                ? Number(prodData.stock_quantity)
+                : 10;
+              const newStock = Math.max(0, currentStock - item.quantity);
+              await supabase
+                .from("products")
+                .update({ stock_quantity: newStock })
+                .eq("id", item.id);
+            }
+          } catch (stockErr) {
+            console.warn(`Failed to update stock for product ID ${item.id}:`, stockErr);
+          }
+        }
       }
       
-      console.log("Successfully saved order to Supabase");
+      console.log("Successfully saved order and updated inventory in Supabase");
     } catch (dbError) {
       console.warn("Database storage failed. Falling back to local storage.", dbError);
       
