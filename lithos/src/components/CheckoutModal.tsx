@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { X, CreditCard, QrCode, Truck, CheckCircle2, Loader2, Sparkles, ShieldCheck } from "lucide-react";
+import { X, CreditCard, Truck, CheckCircle2, Loader2, Sparkles, ShieldCheck } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { CartItem } from "./CartDrawer";
 
@@ -38,11 +38,7 @@ export default function CheckoutModal({
   const [shippingMethod, setShippingMethod] = useState<"standard" | "express">("standard");
 
   // Payment details
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "upi" | "cod">("card");
-  const [cardNumber, setCardNumber] = useState("");
-  const [expiry, setExpiry] = useState("");
-  const [cvv, setCvv] = useState("");
-  const [cardName, setCardName] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"razorpay" | "cod">("razorpay");
   
   // Form errors
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -89,111 +85,10 @@ export default function CheckoutModal({
   const shippingCost = shippingMethod === "express" ? 600 : subtotal >= 15000 ? 0 : 250;
   const total = subtotal + tax + shippingCost;
 
-  // Luhn algorithm validator for simulated cards
-  const validateLuhn = (num: string) => {
-    const cleanNum = num.replace(/\s+/g, "");
-    if (!/^\d{13,19}$/.test(cleanNum)) return false;
-    
-    let sum = 0;
-    let shouldDouble = false;
-    for (let i = cleanNum.length - 1; i >= 0; i--) {
-      let digit = parseInt(cleanNum.charAt(i), 10);
-      if (shouldDouble) {
-        digit *= 2;
-        if (digit > 9) digit -= 9;
-      }
-      sum += digit;
-      shouldDouble = !shouldDouble;
-    }
-    return sum % 10 === 0;
-  };
-
-  // Inputs formatters
-  const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/\D/g, "");
-    const formatted = raw.replace(/(\d{4})(?=\d)/g, "$1 ").substring(0, 19);
-    setCardNumber(formatted);
-  };
-
-  const handleExpiryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let raw = e.target.value.replace(/\D/g, "");
-    if (raw.length > 2) {
-      raw = raw.substring(0, 2) + "/" + raw.substring(2, 4);
-    }
-    setExpiry(raw.substring(0, 5));
-  };
-
-  const handleCvvChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/\D/g, "").substring(0, 4);
-    setCvv(raw);
-  };
-
-  // Form submit handler
-  const handlePlaceOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const newErrors: Record<string, string> = {};
-
-    // Validate shipping fields
-    if (!email || !/\S+@\S+\.\S+/.test(email)) newErrors.email = "Valid email is required";
-    if (!name.trim()) newErrors.name = "Full name is required";
-    if (!address.trim()) newErrors.address = "Address is required";
-    if (!city.trim()) newErrors.city = "City is required";
-    if (!zip || !/^\d{5,8}$/.test(zip)) newErrors.zip = "Valid ZIP/Postal Code is required";
-    if (!phone || phone.length < 9) newErrors.phone = "Valid phone number is required";
-
-    // Validate payment fields if Card selected
-    if (paymentMethod === "card") {
-      const cleanCard = cardNumber.replace(/\s+/g, "");
-      if (!cleanCard || cleanCard.length < 13) {
-        newErrors.cardNumber = "Valid card number is required";
-      } else if (!validateLuhn(cleanCard) && cleanCard !== "4242424242424242") { // Allow 4242 debug card bypass
-        newErrors.cardNumber = "Card failed Luhn checksum validation (invalid card)";
-      }
-      
-      if (!expiry || !/^\d{2}\/\d{2}$/.test(expiry)) {
-        newErrors.expiry = "Use MM/YY format";
-      } else {
-        const [m, y] = expiry.split("/").map(Number);
-        const currentYear = new Date().getFullYear() % 100;
-        const currentMonth = new Date().getMonth() + 1;
-        if (m < 1 || m > 12 || y < currentYear || (y === currentYear && m < currentMonth)) {
-          newErrors.expiry = "Card has expired";
-        }
-      }
-
-      if (!cvv || cvv.length < 3) newErrors.cvv = "Valid CVV is required";
-      if (!cardName.trim()) newErrors.cardName = "Cardholder name is required";
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      // Scroll to error
-      const firstError = Object.keys(newErrors)[0];
-      const element = document.getElementsByName(firstError)[0];
-      if (element) element.scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
-    }
-
-    setErrors({});
-    setStep("processing");
-
-    // Simulate payment authorization updates
-    const processSteps = [
-      { text: "Verifying shipping address...", delay: 600 },
-      { text: "Contacting payment gateway auth...", delay: 1000 },
-      { text: "Securing payment confirmation...", delay: 800 },
-      { text: "Creating database records...", delay: 600 },
-    ];
-
-    for (const stepInfo of processSteps) {
-      setProcessingStatus(stepInfo.text);
-      await new Promise((resolve) => setTimeout(resolve, stepInfo.delay));
-    }
-
-    // Generate simulated Order ID
+  const saveOrder = async (isCod: boolean, razorpayOrderId?: string, razorpayPaymentId?: string) => {
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const datePrefix = new Date().toISOString().slice(2, 10).replace(/-/g, "");
-    const finalOrderId = `SAK-${datePrefix}-${randomSuffix}`;
+    const finalOrderId = razorpayOrderId || `SAK-${datePrefix}-${randomSuffix}`;
 
     const newOrder = {
       customer_email: email,
@@ -204,12 +99,14 @@ export default function CheckoutModal({
         zip,
         phone,
         method: shippingMethod,
+        razorpay_payment_id: razorpayPaymentId || null,
+        razorpay_order_id: razorpayOrderId || null,
       },
       subtotal,
       shipping_cost: shippingCost,
       total,
-      payment_method: paymentMethod.toUpperCase(),
-      status: paymentMethod === "cod" ? "pending" : "paid",
+      payment_method: isCod ? "COD" : "RAZORPAY",
+      status: isCod ? "pending" : "paid",
     };
 
     try {
@@ -267,20 +164,139 @@ export default function CheckoutModal({
     setStep("success");
   };
 
-  // QR Timer simulation
-  const [qrTimer, setQrTimer] = useState(300); // 5 min
-  useEffect(() => {
-    if (paymentMethod !== "upi" || step !== "checkout") return;
-    const interval = setInterval(() => {
-      setQrTimer((prev) => (prev > 0 ? prev - 1 : 300));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [paymentMethod, step]);
+  // Form submit handler
+  const handlePlaceOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const newErrors: Record<string, string> = {};
 
-  const formatTime = (sec: number) => {
-    const mins = Math.floor(sec / 60);
-    const secs = sec % 60;
-    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+    // Validate shipping fields
+    if (!email || !/\S+@\S+\.\S+/.test(email)) newErrors.email = "Valid email is required";
+    if (!name.trim()) newErrors.name = "Full name is required";
+    if (!address.trim()) newErrors.address = "Address is required";
+    if (!city.trim()) newErrors.city = "City is required";
+    if (!zip || !/^\d{5,8}$/.test(zip)) newErrors.zip = "Valid ZIP/Postal Code is required";
+    if (!phone || phone.length < 9) newErrors.phone = "Valid phone number is required";
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      // Scroll to error
+      const firstError = Object.keys(newErrors)[0];
+      const element = document.getElementsByName(firstError)[0];
+      if (element) element.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
+    setErrors({});
+
+    if (paymentMethod === "cod") {
+      setStep("processing");
+      setProcessingStatus("Verifying shipping address...");
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      setProcessingStatus("Creating database records...");
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      await saveOrder(true);
+    } else {
+      // Razorpay checkout flow
+      setStep("processing");
+      setProcessingStatus("Initiating secure payment session...");
+      
+      try {
+        const response = await fetch("/api/create-order", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            amount: total * 100, // Razorpay amount in paise
+            currency: "INR",
+            receipt: `rcpt_${Math.floor(Math.random() * 1000000)}`,
+          }),
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error || "Failed to create Razorpay order.");
+        }
+
+        const orderData = await response.json(); // { order_id, amount, currency }
+
+        const razorpayKeyId = import.meta.env.VITE_RAZORPAY_KEY_ID || "rzp_test_T7tDhs9VFOmHc9";
+
+        const options = {
+          key: razorpayKeyId,
+          amount: orderData.amount,
+          currency: orderData.currency,
+          name: "SAKAMOTO Store",
+          description: `Order for ${cartItems.length} item(s)`,
+          image: "https://api.dicebear.com/7.x/shapes/svg?seed=sakamoto",
+          order_id: orderData.order_id,
+          prefill: {
+            name: name,
+            email: email,
+            contact: phone,
+          },
+          notes: {
+            address: `${address}, ${city}, ${zip}`,
+          },
+          theme: {
+            color: "#e8702a",
+          },
+          handler: async function (paymentRes: any) {
+            try {
+              setProcessingStatus("Verifying transaction...");
+              setStep("processing");
+
+              const verifyResponse = await fetch("/api/verify-payment", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  razorpay_order_id: paymentRes.razorpay_order_id,
+                  razorpay_payment_id: paymentRes.razorpay_payment_id,
+                  razorpay_signature: paymentRes.razorpay_signature,
+                }),
+              });
+
+              if (!verifyResponse.ok) {
+                const errData = await verifyResponse.json();
+                throw new Error(errData.error || "Signature verification failed.");
+              }
+
+              const verifyData = await verifyResponse.json();
+              if (verifyData.status === "success" || verifyData.verified) {
+                setProcessingStatus("Creating database records...");
+                await saveOrder(false, paymentRes.razorpay_order_id, paymentRes.razorpay_payment_id);
+              } else {
+                throw new Error("Invalid transaction signature.");
+              }
+            } catch (err: any) {
+              setStep("checkout");
+              alert(`Payment verification failed: ${err.message}`);
+            }
+          },
+          modal: {
+            ondismiss: function () {
+              setStep("checkout");
+            },
+          },
+        };
+
+        const rzp = new (window as any).Razorpay(options);
+        
+        rzp.on("payment.failed", function (failedRes: any) {
+          console.error("Razorpay Payment failed:", failedRes.error);
+          alert(`Payment failed: ${failedRes.error.description || "Unknown error"}`);
+          setStep("checkout");
+        });
+
+        rzp.open();
+      } catch (error: any) {
+        console.error("Razorpay initiation error:", error);
+        alert(`Failed to start payment: ${error.message || "Unknown error"}`);
+        setStep("checkout");
+      }
+    }
   };
 
   if (!isOpen) return null;
@@ -457,23 +473,13 @@ export default function CheckoutModal({
                   <div className="flex border border-white/10 bg-white/5 rounded-xl p-1 gap-1">
                     <button
                       type="button"
-                      onClick={() => setPaymentMethod("card")}
+                      onClick={() => setPaymentMethod("razorpay")}
                       className={`flex-1 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
-                        paymentMethod === "card" ? "bg-white text-gray-900 shadow-lg" : "text-white/65 hover:text-white"
+                        paymentMethod === "razorpay" ? "bg-white text-gray-900 shadow-lg" : "text-white/65 hover:text-white"
                       }`}
                     >
                       <CreditCard size={14} />
-                      Card
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod("upi")}
-                      className={`flex-1 py-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
-                        paymentMethod === "upi" ? "bg-white text-gray-900 shadow-lg" : "text-white/65 hover:text-white"
-                      }`}
-                    >
-                      <QrCode size={14} />
-                      UPI QR Code
+                      Pay Online (Razorpay)
                     </button>
                     <button
                       type="button"
@@ -482,106 +488,20 @@ export default function CheckoutModal({
                         paymentMethod === "cod" ? "bg-white text-gray-900 shadow-lg" : "text-white/65 hover:text-white"
                       }`}
                     >
+                      <ShieldCheck size={14} />
                       COD
                     </button>
                   </div>
 
                   {/* Option Views */}
-                  {paymentMethod === "card" && (
-                    <div className="space-y-4 bg-white/5 border border-white/5 rounded-xl p-4 animate-modal-scale">
-                      <div className="flex justify-between items-center text-[10px] text-white/50 uppercase font-semibold">
-                        <span>Card Details</span>
-                        <div className="flex gap-1.5 text-white/40">
-                          <span className="border border-white/10 px-1 rounded bg-black">Visa</span>
-                          <span className="border border-white/10 px-1 rounded bg-black">MC</span>
-                          <span className="border border-white/10 px-1 rounded bg-black">Amex</span>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[9px] text-white/50 uppercase font-semibold">Card Number</label>
-                        <div className="relative">
-                          <input
-                            type="text"
-                            name="cardNumber"
-                            value={cardNumber}
-                            onChange={handleCardNumberChange}
-                            placeholder="4242 4242 4242 4242"
-                            className="w-full bg-[#090909] border border-white/10 rounded-lg px-3.5 py-2 pl-10 text-sm text-white focus:outline-none focus:border-[#e8702a]"
-                          />
-                          <CreditCard size={16} className="absolute left-3.5 top-2.5 text-white/40" />
-                        </div>
-                        {errors.cardNumber && <span className="text-red-400 text-[10px]">{errors.cardNumber}</span>}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-[9px] text-white/50 uppercase font-semibold">Expiry Date</label>
-                          <input
-                            type="text"
-                            name="expiry"
-                            value={expiry}
-                            onChange={handleExpiryChange}
-                            placeholder="MM/YY"
-                            className="bg-[#090909] border border-white/10 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-[#e8702a]"
-                          />
-                          {errors.expiry && <span className="text-red-400 text-[10px]">{errors.expiry}</span>}
-                        </div>
-
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-[9px] text-white/50 uppercase font-semibold">CVV Code</label>
-                          <input
-                            type="password"
-                            name="cvv"
-                            value={cvv}
-                            onChange={handleCvvChange}
-                            placeholder="•••"
-                            className="bg-[#090909] border border-white/10 rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-[#e8702a]"
-                          />
-                          {errors.cvv && <span className="text-red-400 text-[10px]">{errors.cvv}</span>}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[9px] text-white/50 uppercase font-semibold">Cardholder Name</label>
-                        <input
-                          type="text"
-                          name="cardName"
-                          value={cardName}
-                          onChange={(e) => setCardName(e.target.value)}
-                          placeholder="NAME ON CARD"
-                          className="bg-[#090909] border border-white/10 rounded-lg px-3.5 py-2 text-sm text-white uppercase focus:outline-none focus:border-[#e8702a] tracking-wider"
-                        />
-                        {errors.cardName && <span className="text-red-400 text-[10px]">{errors.cardName}</span>}
-                      </div>
-                    </div>
-                  )}
-
-                  {paymentMethod === "upi" && (
-                    <div className="flex flex-col items-center gap-4 bg-white/5 border border-white/5 rounded-xl p-6 text-center animate-modal-scale">
-                      <div className="bg-white p-3 rounded-xl shadow-lg border-2 border-[#e8702a]">
-                        {/* SVG QR Code Simulation */}
-                        <svg width="128" height="128" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <rect width="100" height="100" fill="white" />
-                          <path d="M5 5h30v30H5V5zm4 4v22h22V9H9zM5 65h30v30H5V65zm4 4v22h22V69H9zM65 5h30v30H65V5zm4 4v22h22V9H69z" fill="black" />
-                          <path d="M15 15h10v10H15V15zm0 60h10v10H15V75zm60-60h10v10H75V15z" fill="black" />
-                          <path d="M45 10h10v10H45V10zm5 15h10v20H50V25zm10 5h10v10H60V30zm5 15h15v10H65V45zm-15 5h10v10H50V50zm-10 5h20v10H40V55zm5 15h10v15H45V70zm15 5h15v10H60V75zm15-15h10v10H75V60zm5 15h10v10H80V75zm10-35h5v20h-5V40zm-45 5h10v10H35V45zm30 15h10v10H65V60z" fill="black" />
-                        </svg>
-                      </div>
-
+                  {paymentMethod === "razorpay" && (
+                    <div className="bg-white/5 border border-white/5 rounded-xl p-5 text-center space-y-2.5 animate-modal-scale">
+                      <CreditCard size={32} className="text-[#e8702a] mx-auto" />
                       <div>
-                        <p className="text-xs text-white font-medium">Scan to Pay via UPI apps</p>
-                        <p className="text-[10px] text-white/50 mt-1 max-w-xs leading-relaxed">
-                          Scan the code with any app like GPay, PhonePe, or BHIM. Transaction code: <span className="font-mono text-white/70">SAK-{Math.floor(100000 + Math.random() * 900000)}</span>
+                        <p className="text-xs text-white font-semibold">Secure Online Payment</p>
+                        <p className="text-[10px] text-white/50 mt-1 max-w-xs mx-auto leading-relaxed">
+                          Supports Credit/Debit Cards, UPI, Netbanking, and Wallets. Payments are processed securely via Razorpay.
                         </p>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 text-xs text-[#e8702a] font-semibold bg-[#e8702a]/10 px-3 py-1.5 rounded-full border border-[#e8702a]/20">
-                        <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#e8702a] opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#e8702a]"></span>
-                        </span>
-                        Awaiting Payment: {formatTime(qrTimer)}
                       </div>
                     </div>
                   )}
