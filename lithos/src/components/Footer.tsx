@@ -6,7 +6,11 @@ const FOOTER_LINKS = {
   Support: ["Shipping & Returns", "Size Guide", "FAQs", "Contact", "Care Guide"],
 };
 
-export default function Footer() {
+interface FooterProps {
+  onLinkClick?: (target: string) => void;
+}
+
+export default function Footer({ onLinkClick }: FooterProps) {
   return (
     <footer className="bg-black border-t border-white/10 pt-16 pb-8 px-5 sm:px-10 md:px-14">
       <div className="max-w-7xl mx-auto">
@@ -58,16 +62,30 @@ export default function Footer() {
                 {heading}
               </h4>
               <ul className="space-y-2.5">
-                {links.map((link) => (
-                  <li key={link}>
-                    <a
-                      href="#"
-                      className="text-white/50 text-xs hover:text-white transition-colors"
-                    >
-                      {link}
-                    </a>
-                  </li>
-                ))}
+                {links.map((link) => {
+                  let targetId = "";
+                  if (link === "FAQs") targetId = "FAQs";
+                  else if (link === "Contact") targetId = "Contact";
+                  else if (link === "About Us") targetId = "About";
+                  else if (link === "Stores") targetId = "Stores";
+
+                  return (
+                    <li key={link}>
+                      <a
+                        href={targetId ? `#${targetId}` : "#"}
+                        onClick={(e) => {
+                          if (targetId && onLinkClick) {
+                            e.preventDefault();
+                            onLinkClick(targetId);
+                          }
+                        }}
+                        className="text-white/50 text-xs hover:text-white transition-colors"
+                      >
+                        {link}
+                      </a>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ))}

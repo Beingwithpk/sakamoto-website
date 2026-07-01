@@ -17,6 +17,7 @@ import CartDrawer, { type CartItem } from "./components/CartDrawer";
 import WishlistDrawer, { type WishlistItem } from "./components/WishlistDrawer";
 import CheckoutModal from "./components/CheckoutModal";
 import CustomerPortalModal from "./components/CustomerPortalModal";
+import FaqsSection, { type Faq } from "./components/FaqsSection";
 
 
 const BG_IMAGE_1 = "/images/hero-base.png";
@@ -27,6 +28,7 @@ const NAV_LINKS = [
   { label: "About", target: "About" },
   { label: "Stores", target: "Stores" },
   { label: "Contact", target: "Contact" },
+  { label: "FAQ", target: "FAQs" },
 ];
 
 interface User {
@@ -77,6 +79,8 @@ export default function App() {
 
   /* ── Products list from database ── */
   const [products, setProducts] = useState<Product[]>([]);
+  /* ── FAQs list from database ── */
+  const [faqs, setFaqs] = useState<Faq[]>([]);
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -102,10 +106,26 @@ export default function App() {
     }
   }, []);
 
-  // Fetch products on mount
+  const fetchFaqs = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("faqs")
+        .select("*")
+        .order("display_order", { ascending: true });
+      if (error) throw error;
+      if (data) {
+        setFaqs(data);
+      }
+    } catch (err) {
+      console.error("Error fetching FAQs from database:", err);
+    }
+  }, []);
+
+  // Fetch products and FAQs on mount
   useEffect(() => {
     fetchProducts();
-  }, [fetchProducts]);
+    fetchFaqs();
+  }, [fetchProducts, fetchFaqs]);
 
   /* ── Cart & Wishlist Drawer State ── */
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -296,6 +316,11 @@ export default function App() {
   /* ── Helper: Scroll to Section ── */
   const scrollToSection = (id: string) => {
     setActiveNav(id);
+    if (id === "FAQs") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      setMobileMenuOpen(false);
+      return;
+    }
     const element = document.getElementById(id);
     if (element) {
       const headerOffset = 80;
@@ -555,6 +580,8 @@ export default function App() {
         products={products}
         onBack={() => setIsAdminView(false)}
         onRefreshProducts={fetchProducts}
+        faqs={faqs}
+        onRefreshFaqs={fetchFaqs}
       />
     );
   }
@@ -818,114 +845,120 @@ export default function App() {
         )}
       </div>
 
-      {/* ══════════════ HERO SECTION ══════════════ */}
-      <section
-        className="relative w-full overflow-hidden h-screen bg-black"
-        style={{ height: "100dvh" }}
-      >
-        {/* 1 ─ Base image */}
-        <div
-          className="absolute inset-0 bg-center bg-cover bg-no-repeat z-10 hero-zoom"
-          style={{ backgroundImage: `url(${BG_IMAGE_1})` }}
-        />
-
-        {/* Dark overlay for text readability */}
-        <div className="absolute inset-0 bg-black/30 z-[15]" />
-
-        {/* 2 ─ Reveal layer */}
-        <RevealLayer
-          image={BG_IMAGE_2}
-          cursorX={cursorPos.x}
-          cursorY={cursorPos.y}
-        />
-
-        {/* 3 ─ Heading */}
-        <div className="absolute top-[14%] left-0 right-0 flex flex-col items-center text-center px-5 pointer-events-none z-50">
-          <h1 className="text-white leading-[0.95]">
-            <span
-              className="block font-playfair italic font-normal text-5xl sm:text-7xl md:text-8xl hero-anim hero-reveal"
-              style={{ letterSpacing: "-0.05em", animationDelay: "0.25s" }}
-            >
-              Style beyond
-            </span>
-            <span
-              className="block font-normal text-5xl sm:text-7xl md:text-8xl -mt-1 hero-anim hero-reveal"
-              style={{ letterSpacing: "-0.08em", animationDelay: "0.42s" }}
-            >
-              the ordinary
-            </span>
-          </h1>
-        </div>
-
-        {/* 4 ─ Bottom-left paragraph */}
-        <div
-          className="hidden sm:block absolute bottom-14 left-10 md:left-14 max-w-[260px] z-50 hero-anim hero-fade"
-          style={{ animationDelay: "0.7s" }}
-        >
-          <p className="text-sm text-white/80 leading-relaxed">
-            Rooted in Japanese craftsmanship, SAKAMOTO creates garments that
-            bridge heritage and modernity — designed to be worn, not just
-            displayed.
-          </p>
-        </div>
-
-        {/* 5 ─ Bottom-right block */}
-        <div
-          className="absolute bottom-10 sm:bottom-24 left-5 right-5 sm:left-auto sm:right-10 md:right-14 max-w-full sm:max-w-[260px] flex flex-col items-start gap-4 sm:gap-5 z-50 hero-anim hero-fade"
-          style={{ animationDelay: "0.85s" }}
-        >
-          <p className="text-xs sm:text-sm text-white/80 leading-relaxed">
-            Explore our latest collection of premium streetwear, handcrafted
-            with intention and purpose for those who move differently.
-          </p>
-          <button
-            onClick={() => scrollToSection("Collections")}
-            className="bg-[#e8702a] hover:bg-[#d2611f] text-white text-sm font-medium px-7 py-3 rounded-full transition-all hover:scale-[1.03] active:scale-95 hover:shadow-lg hover:shadow-[#e8702a]/30"
+      {activeNav === "FAQs" ? (
+        <FaqsSection faqs={faqs} onBackToStore={() => scrollToSection("Collections")} />
+      ) : (
+        <>
+          {/* ══════════════ HERO SECTION ══════════════ */}
+          <section
+            className="relative w-full overflow-hidden h-screen bg-black"
+            style={{ height: "100dvh" }}
           >
-            Explore Collection
-          </button>
-        </div>
-      </section>
+            {/* 1 ─ Base image */}
+            <div
+              className="absolute inset-0 bg-center bg-cover bg-no-repeat z-10 hero-zoom"
+              style={{ backgroundImage: `url(${BG_IMAGE_1})` }}
+            />
 
-      {/* ══════════════ MARQUEE ══════════════ */}
-      <MarqueeTicker />
+            {/* Dark overlay for text readability */}
+            <div className="absolute inset-0 bg-black/30 z-[15]" />
 
-      {/* ══════════════ FEATURED COLLECTIONS ══════════════ */}
-      <FeaturedCollections
-        onAddCodeCart={handleAddToCart}
-        onAddCodeWishlist={handleToggleWishlist}
-        wishlistIds={wishlistItems.map((item) => item.id)}
-      />
+            {/* 2 ─ Reveal layer */}
+            <RevealLayer
+              image={BG_IMAGE_2}
+              cursorX={cursorPos.x}
+              cursorY={cursorPos.y}
+            />
 
-      {/* ══════════════ PRODUCT GRID ══════════════ */}
-      <ProductGrid
-        products={products}
-        onAddCodeCart={handleAddToCart}
-        onAddCodeWishlist={handleToggleWishlist}
-        wishlistIds={wishlistItems.map((item) => item.id)}
-      />
+            {/* 3 ─ Heading */}
+            <div className="absolute top-[14%] left-0 right-0 flex flex-col items-center text-center px-5 pointer-events-none z-50">
+              <h1 className="text-white leading-[0.95]">
+                <span
+                  className="block font-playfair italic font-normal text-5xl sm:text-7xl md:text-8xl hero-anim hero-reveal"
+                  style={{ letterSpacing: "-0.05em", animationDelay: "0.25s" }}
+                >
+                  Style beyond
+                </span>
+                <span
+                  className="block font-normal text-5xl sm:text-7xl md:text-8xl -mt-1 hero-anim hero-reveal"
+                  style={{ letterSpacing: "-0.08em", animationDelay: "0.42s" }}
+                >
+                  the ordinary
+                </span>
+              </h1>
+            </div>
 
-      {/* ══════════════ ACCESSORIES ══════════════ */}
-      <Accessories
-        onAddCodeCart={handleAddToCart}
-        onAddCodeWishlist={handleToggleWishlist}
-        wishlistIds={wishlistItems.map((item) => item.id)}
-      />
+            {/* 4 ─ Bottom-left paragraph */}
+            <div
+              className="hidden sm:block absolute bottom-14 left-10 md:left-14 max-w-[260px] z-50 hero-anim hero-fade"
+              style={{ animationDelay: "0.7s" }}
+            >
+              <p className="text-sm text-white/80 leading-relaxed">
+                Rooted in Japanese craftsmanship, SAKAMOTO creates garments that
+                bridge heritage and modernity — designed to be worn, not just
+                displayed.
+              </p>
+            </div>
 
-      {/* ══════════════ ABOUT ══════════════ */}
-      <AboutSection />
+            {/* 5 ─ Bottom-right block */}
+            <div
+              className="absolute bottom-10 sm:bottom-24 left-5 right-5 sm:left-auto sm:right-10 md:right-14 max-w-full sm:max-w-[260px] flex flex-col items-start gap-4 sm:gap-5 z-50 hero-anim hero-fade"
+              style={{ animationDelay: "0.85s" }}
+            >
+              <p className="text-xs sm:text-sm text-white/80 leading-relaxed">
+                Explore our latest collection of premium streetwear, handcrafted
+                with intention and purpose for those who move differently.
+              </p>
+              <button
+                onClick={() => scrollToSection("Collections")}
+                className="bg-[#e8702a] hover:bg-[#d2611f] text-white text-sm font-medium px-7 py-3 rounded-full transition-all hover:scale-[1.03] active:scale-95 hover:shadow-lg hover:shadow-[#e8702a]/30"
+              >
+                Explore Collection
+              </button>
+            </div>
+          </section>
 
-      {/* ══════════════ STORES ══════════════ */}
-      <StoresSection />
+          {/* ══════════════ MARQUEE ══════════════ */}
+          <MarqueeTicker />
 
-      {/* ══════════════ CONTACT ══════════════ */}
-      <ContactSection />
+          {/* ══════════════ FEATURED COLLECTIONS ══════════════ */}
+          <FeaturedCollections
+            onAddCodeCart={handleAddToCart}
+            onAddCodeWishlist={handleToggleWishlist}
+            wishlistIds={wishlistItems.map((item) => item.id)}
+          />
 
-      {/* ══════════════ NEWSLETTER ══════════════ */}
-      <Newsletter />
+          {/* ══════════════ PRODUCT GRID ══════════════ */}
+          <ProductGrid
+            products={products}
+            onAddCodeCart={handleAddToCart}
+            onAddCodeWishlist={handleToggleWishlist}
+            wishlistIds={wishlistItems.map((item) => item.id)}
+          />
+
+          {/* ══════════════ ACCESSORIES ══════════════ */}
+          <Accessories
+            onAddCodeCart={handleAddToCart}
+            onAddCodeWishlist={handleToggleWishlist}
+            wishlistIds={wishlistItems.map((item) => item.id)}
+          />
+
+          {/* ══════════════ ABOUT ══════════════ */}
+          <AboutSection />
+
+          {/* ══════════════ STORES ══════════════ */}
+          <StoresSection />
+
+          {/* ══════════════ CONTACT ══════════════ */}
+          <ContactSection />
+
+          {/* ══════════════ NEWSLETTER ══════════════ */}
+          <Newsletter />
+        </>
+      )}
 
       {/* ══════════════ FOOTER ══════════════ */}
-      <Footer />
+      <Footer onLinkClick={scrollToSection} />
 
       {/* ══════════════ AUTH MODAL ══════════════ */}
       <AuthModal

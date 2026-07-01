@@ -258,5 +258,52 @@ create policy "Anyone can insert order items"
 -- 8. Add stock_quantity to products table
 alter table public.products add column if not exists stock_quantity integer default 10;
 
+-- 9. Create FAQs table
+create table if not exists public.faqs (
+  id serial primary key,
+  question text not null,
+  answer text not null,
+  display_order integer default 0,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Enable RLS on faqs
+alter table public.faqs enable row level security;
+
+-- Create policies for faqs
+create policy "Allow public read access to faqs" 
+  on public.faqs for select 
+  using (true);
+
+create policy "Allow admins to manage faqs" 
+  on public.faqs for all
+  using (
+    exists (
+      select 1 from public.profiles
+      where profiles.id = auth.uid()
+      and profiles.is_admin = true
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.profiles
+      where profiles.id = auth.uid()
+      and profiles.is_admin = true
+    )
+  );
+
+-- Seed initial FAQs if the table is empty
+insert into public.faqs (id, question, answer, display_order) values
+  (1, 'What is your shipping policy?', 'We offer standard and express shipping options. Standard shipping (3–5 business days) is free on all orders above ₹15,000, otherwise ₹250. Express shipping (1–2 business days) is available for flat ₹600.', 1),
+  (2, 'How do I return or exchange my order?', 'We accept returns and exchanges on unworn, unwashed items in their original packaging with tags attached within 14 days of delivery. Please contact our support team to register your request.', 2),
+  (3, 'Are your streetwear collections unisex?', 'Yes, all SAKAMOTO collections feature gender-neutral patterns and relaxed oversized fits designed for modern unisex styling. Please refer to our Size Guide for detailed measurements.', 3),
+  (4, 'How should I wash and care for my items?', 'To preserve premium Japanese cotton prints, we recommend washing garments inside out in cold water with similar colors. Line dry or tumble dry low. Do not iron directly on graphics or embroideries.', 4),
+  (5, 'Do you release limited drops?', 'Yes, we release limited-edition drops throughout the year. Once an item in a drop is sold out, it is rarely restocked. Follow our newsletter and marquee ticker for release dates.', 5)
+on conflict (id) do nothing;
+
+-- Reset serial sequence
+select setval(pg_get_serial_sequence('public.faqs', 'id'), coalesce((select max(id) from public.faqs), 1));
+
+
 
 

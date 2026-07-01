@@ -3,13 +3,24 @@ import { Plus, Edit2, Trash2, ArrowLeft, AlertCircle, Sparkles, Check, Image as 
 import { supabase } from "../lib/supabase";
 import type { Product } from "./ProductGrid";
 
+import type { Faq } from "./FaqsSection";
+
 interface AdminPortalProps {
   products: Product[];
   onBack: () => void;
   onRefreshProducts: () => Promise<void>;
+  faqs: Faq[];
+  onRefreshFaqs: () => Promise<void>;
 }
 
-export default function AdminPortal({ products, onBack, onRefreshProducts }: AdminPortalProps) {
+export default function AdminPortal({
+  products,
+  onBack,
+  onRefreshProducts,
+  faqs,
+  onRefreshFaqs,
+}: AdminPortalProps) {
+  const [activeTab, setActiveTab] = useState<"catalog" | "faqs">("catalog");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   
@@ -20,6 +31,13 @@ export default function AdminPortal({ products, onBack, onRefreshProducts }: Adm
   const [image, setImage] = useState("");
   const [isNew, setIsNew] = useState(false);
   const [stock, setStock] = useState("10");
+  
+  // FAQs form fields
+  const [isFaqModalOpen, setIsFaqModalOpen] = useState(false);
+  const [editingFaq, setEditingFaq] = useState<Faq | null>(null);
+  const [faqQuestion, setFaqQuestion] = useState("");
+  const [faqAnswer, setFaqAnswer] = useState("");
+  const [faqDisplayOrder, setFaqDisplayOrder] = useState("1");
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +69,98 @@ export default function AdminPortal({ products, onBack, onRefreshProducts }: Adm
     setError(null);
     setSuccessMsg(null);
     setIsModalOpen(true);
+  };
+
+  const openAddFaqModal = () => {
+    setEditingFaq(null);
+    setFaqQuestion("");
+    setFaqAnswer("");
+    setFaqDisplayOrder((faqs.length + 1).toString());
+    setError(null);
+    setSuccessMsg(null);
+    setIsFaqModalOpen(true);
+  };
+
+  const openEditFaqModal = (faq: Faq) => {
+    setEditingFaq(faq);
+    setFaqQuestion(faq.question);
+    setFaqAnswer(faq.answer);
+    setFaqDisplayOrder((faq.display_order || 0).toString());
+    setError(null);
+    setSuccessMsg(null);
+    setIsFaqModalOpen(true);
+  };
+
+  const handleFaqSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!faqQuestion.trim() || !faqAnswer.trim()) {
+      setError("Question and Answer are required.");
+      return;
+    }
+
+    const orderNum = parseInt(faqDisplayOrder, 10);
+    if (isNaN(orderNum) || orderNum < 0) {
+      setError("Please enter a valid display order.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSuccessMsg(null);
+
+    const faqPayload = {
+      question: faqQuestion,
+      answer: faqAnswer,
+      display_order: orderNum,
+    };
+
+    try {
+      if (editingFaq) {
+        const { error: updateErr } = await supabase
+          .from("faqs")
+          .update(faqPayload)
+          .eq("id", editingFaq.id);
+        if (updateErr) throw updateErr;
+        setSuccessMsg("FAQ updated successfully!");
+      } else {
+        const { error: insertErr } = await supabase
+          .from("faqs")
+          .insert([faqPayload]);
+        if (insertErr) throw insertErr;
+        setSuccessMsg("FAQ added successfully!");
+      }
+
+      await onRefreshFaqs();
+      setTimeout(() => setIsFaqModalOpen(false), 800);
+    } catch (err: any) {
+      console.error("Error saving FAQ:", err);
+      setError(err.message || "Failed to save FAQ.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteFaq = async (id: number) => {
+    if (!window.confirm("Are you sure you want to delete this FAQ?")) return;
+
+    setLoading(true);
+    setError(null);
+    setSuccessMsg(null);
+
+    try {
+      const { error: delErr } = await supabase
+        .from("faqs")
+        .delete()
+        .eq("id", id);
+      if (delErr) throw delErr;
+      setSuccessMsg("FAQ deleted successfully!");
+      await onRefreshFaqs();
+    } catch (err: any) {
+      console.error("Error deleting FAQ:", err);
+      setError(err.message || "Failed to delete FAQ.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -163,13 +273,23 @@ export default function AdminPortal({ products, onBack, onRefreshProducts }: Adm
             </div>
           </div>
           
-          <button
-            onClick={openAddModal}
-            className="flex items-center justify-center gap-2 bg-[#e8702a] hover:bg-[#d2611f] text-white font-semibold text-sm px-5 py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-98 shadow-lg shadow-[#e8702a]/15 shrink-0"
-          >
-            <Plus size={16} />
-            Add New Product
-          </button>
+          {activeTab === "catalog" ? (
+            <button
+              onClick={openAddModal}
+              className="flex items-center justify-center gap-2 bg-[#e8702a] hover:bg-[#d2611f] text-white font-semibold text-sm px-5 py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-98 shadow-lg shadow-[#e8702a]/15 shrink-0"
+            >
+              <Plus size={16} />
+              Add New Product
+            </button>
+          ) : (
+            <button
+              onClick={openAddFaqModal}
+              className="flex items-center justify-center gap-2 bg-[#e8702a] hover:bg-[#d2611f] text-white font-semibold text-sm px-5 py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-98 shadow-lg shadow-[#e8702a]/15 shrink-0"
+            >
+              <Plus size={16} />
+              Add New FAQ
+            </button>
+          )}
         </div>
 
         {/* Global Notifications */}
@@ -186,20 +306,59 @@ export default function AdminPortal({ products, onBack, onRefreshProducts }: Adm
           </div>
         )}
 
+        {/* Tabs Bar */}
+        <div className="flex gap-6 border-b border-white/10 mb-8 pb-3">
+          <button
+            onClick={() => {
+              setActiveTab("catalog");
+              setError(null);
+              setSuccessMsg(null);
+            }}
+            className={`text-sm font-semibold tracking-wider uppercase transition-all pb-2.5 relative ${
+              activeTab === "catalog"
+                ? "text-[#e8702a]"
+                : "text-white/40 hover:text-white/70"
+            }`}
+          >
+            Manage Catalog
+            {activeTab === "catalog" && (
+              <span className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-[#e8702a]" />
+            )}
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab("faqs");
+              setError(null);
+              setSuccessMsg(null);
+            }}
+            className={`text-sm font-semibold tracking-wider uppercase transition-all pb-2.5 relative ${
+              activeTab === "faqs"
+                ? "text-[#e8702a]"
+                : "text-white/40 hover:text-white/70"
+            }`}
+          >
+            Manage FAQs
+            {activeTab === "faqs" && (
+              <span className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-[#e8702a]" />
+            )}
+          </button>
+        </div>
+
         {/* Products List */}
-        {products.length === 0 ? (
-          <div className="text-center py-20 bg-white/5 border border-white/10 rounded-2xl">
-            <ImageIcon className="mx-auto text-white/20 mb-4" size={48} />
-            <h3 className="text-lg font-medium text-white/80">No products found</h3>
-            <p className="text-white/40 text-sm mt-1 mb-6">Database is empty. Add a product to get started.</p>
-            <button
-              onClick={openAddModal}
-              className="bg-white/10 hover:bg-white/15 border border-white/20 text-white font-semibold text-sm px-4 py-2.5 rounded-xl transition-all"
-            >
-              Create Product
-            </button>
-          </div>
-        ) : (
+        {activeTab === "catalog" && (
+          products.length === 0 ? (
+            <div className="text-center py-20 bg-white/5 border border-white/10 rounded-2xl">
+              <ImageIcon className="mx-auto text-white/20 mb-4" size={48} />
+              <h3 className="text-lg font-medium text-white/80">No products found</h3>
+              <p className="text-white/40 text-sm mt-1 mb-6">Database is empty. Add a product to get started.</p>
+              <button
+                onClick={openAddModal}
+                className="bg-white/10 hover:bg-white/15 border border-white/20 text-white font-semibold text-sm px-4 py-2.5 rounded-xl transition-all"
+              >
+                Create Product
+              </button>
+            </div>
+          ) : (
           <div className="overflow-hidden bg-[#111111] border border-white/10 rounded-2xl shadow-xl">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -290,6 +449,69 @@ export default function AdminPortal({ products, onBack, onRefreshProducts }: Adm
                 </tbody>
               </table>
             </div>
+          </div>
+        ))}
+        
+        {/* Render FAQs Manager */}
+        {activeTab === "faqs" && (
+          <div>
+            {faqs.length === 0 ? (
+              <div className="text-center py-20 bg-white/5 border border-white/10 rounded-2xl">
+                <Sparkles className="mx-auto text-white/20 mb-4" size={48} />
+                <h3 className="text-lg font-medium text-white/80">No FAQs found</h3>
+                <p className="text-white/40 text-sm mt-1 mb-6">Database is empty. Add an FAQ to get started.</p>
+                <button
+                  onClick={openAddFaqModal}
+                  className="bg-white/10 hover:bg-white/15 border border-white/20 text-white font-semibold text-sm px-4 py-2.5 rounded-xl transition-all"
+                >
+                  Create FAQ
+                </button>
+              </div>
+            ) : (
+              <div className="bg-white/[0.02] border border-white/10 rounded-2xl overflow-hidden shadow-xl animate-modal-fade">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-white/10 text-white/40 text-xs font-semibold uppercase tracking-wider bg-white/[0.02]">
+                        <th className="px-6 py-4 w-1/4">Question</th>
+                        <th className="px-6 py-4 w-1/2">Answer</th>
+                        <th className="px-6 py-4 text-center">Order</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5 text-sm">
+                      {[...faqs].sort((a,b) => (a.display_order||0)-(b.display_order||0)).map((faq) => (
+                        <tr key={faq.id} className="hover:bg-white/[0.01] transition-colors">
+                          <td className="px-6 py-4 font-semibold text-white/95">{faq.question}</td>
+                          <td className="px-6 py-4 text-white/60 text-xs leading-relaxed max-w-[400px]">
+                            {faq.answer}
+                          </td>
+                          <td className="px-6 py-4 text-center text-white/70">{faq.display_order}</td>
+                          <td className="px-6 py-4 text-right">
+                            <div className="flex justify-end gap-2.5">
+                              <button
+                                onClick={() => openEditFaqModal(faq)}
+                                className="p-2 text-white/60 hover:text-[#e8702a] hover:bg-white/5 rounded-lg transition-colors border border-transparent hover:border-white/10"
+                                title="Edit FAQ"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteFaq(faq.id)}
+                                className="p-2 text-white/40 hover:text-red-400 hover:bg-red-500/5 rounded-lg transition-colors border border-transparent hover:border-red-500/10"
+                                title="Delete FAQ"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -442,6 +664,95 @@ export default function AdminPortal({ products, onBack, onRefreshProducts }: Adm
                   ) : (
                     "Add Product"
                   )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* FAQs Modal */}
+      {isFaqModalOpen && (
+        <div className="fixed inset-0 z-[150] overflow-y-auto flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black/75 backdrop-blur-md cursor-pointer"
+            onClick={() => setIsFaqModalOpen(false)}
+          />
+          
+          {/* Modal Box */}
+          <div className="relative bg-[#0e0e0e] border border-white/15 rounded-3xl w-full max-w-lg p-6 sm:p-8 shadow-2xl z-10 animate-modal-scale max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-light tracking-tight font-playfair italic text-white mb-6">
+              {editingFaq ? "Edit FAQ" : "Add New FAQ"}
+            </h2>
+
+            <form onSubmit={handleFaqSubmit} className="space-y-5">
+              <div>
+                <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">
+                  Question
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Do you ship worldwide?"
+                  value={faqQuestion}
+                  onChange={(e) => setFaqQuestion(e.target.value)}
+                  disabled={loading}
+                  className="w-full bg-white/5 border border-white/10 text-white text-sm rounded-xl px-4 py-3 outline-none focus:border-[#e8702a] transition-all"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">
+                  Answer
+                </label>
+                <textarea
+                  placeholder="e.g. Yes, we ship standard and express worldwide..."
+                  value={faqAnswer}
+                  onChange={(e) => setFaqAnswer(e.target.value)}
+                  disabled={loading}
+                  rows={4}
+                  className="w-full bg-white/5 border border-white/10 text-white text-sm rounded-xl px-4 py-3 outline-none focus:border-[#e8702a] transition-all resize-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-white/60 text-xs font-semibold uppercase tracking-wider mb-1.5">
+                  Display Order
+                </label>
+                <input
+                  type="number"
+                  placeholder="e.g. 1"
+                  value={faqDisplayOrder}
+                  onChange={(e) => setFaqDisplayOrder(e.target.value)}
+                  disabled={loading}
+                  className="w-full bg-white/5 border border-white/10 text-white text-sm rounded-xl px-4 py-3 outline-none focus:border-[#e8702a] transition-all"
+                  required
+                />
+              </div>
+
+              {error && (
+                <p className="text-red-400 text-xs font-medium bg-red-500/10 border border-red-500/15 p-3 rounded-lg">
+                  {error}
+                </p>
+              )}
+
+              <div className="flex gap-4 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsFaqModalOpen(false)}
+                  disabled={loading}
+                  className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold text-sm py-3.5 rounded-xl transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-[#e8702a] hover:bg-[#d2611f] disabled:opacity-55 text-white font-semibold text-sm py-3.5 rounded-xl transition-all"
+                >
+                  {loading ? "Saving..." : "Save FAQ"}
                 </button>
               </div>
             </form>
