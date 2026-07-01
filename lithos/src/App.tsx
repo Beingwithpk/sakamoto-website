@@ -18,6 +18,8 @@ import WishlistDrawer, { type WishlistItem } from "./components/WishlistDrawer";
 import CheckoutModal from "./components/CheckoutModal";
 import CustomerPortalModal from "./components/CustomerPortalModal";
 import FaqsSection, { type Faq } from "./components/FaqsSection";
+import SizeGuide from "./components/SizeGuide";
+import CareGuide from "./components/CareGuide";
 
 
 const BG_IMAGE_1 = "/images/hero-base.png";
@@ -316,7 +318,7 @@ export default function App() {
   /* ── Helper: Scroll to Section ── */
   const scrollToSection = (id: string) => {
     setActiveNav(id);
-    if (id === "FAQs") {
+    if (id === "FAQs" || id === "SizeGuide" || id === "CareGuide") {
       window.scrollTo({ top: 0, behavior: "smooth" });
       setMobileMenuOpen(false);
       return;
@@ -847,6 +849,10 @@ export default function App() {
 
       {activeNav === "FAQs" ? (
         <FaqsSection faqs={faqs} onBackToStore={() => scrollToSection("Collections")} />
+      ) : activeNav === "SizeGuide" ? (
+        <SizeGuide onBackToStore={() => scrollToSection("Collections")} />
+      ) : activeNav === "CareGuide" ? (
+        <CareGuide onBackToStore={() => scrollToSection("Collections")} />
       ) : (
         <>
           {/* ══════════════ HERO SECTION ══════════════ */}

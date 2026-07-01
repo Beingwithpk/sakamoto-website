@@ -68,6 +68,8 @@ export default function Footer({ onLinkClick }: FooterProps) {
                   else if (link === "Contact") targetId = "Contact";
                   else if (link === "About Us") targetId = "About";
                   else if (link === "Stores") targetId = "Stores";
+                  else if (link === "Size Guide") targetId = "SizeGuide";
+                  else if (link === "Care Guide") targetId = "CareGuide";
 
                   return (
                     <li key={link}>
