@@ -305,5 +305,25 @@ on conflict (id) do nothing;
 select setval(pg_get_serial_sequence('public.faqs', 'id'), coalesce((select max(id) from public.faqs), 1));
 
 
+-- 10. Add update policy for orders table to allow admins to modify status
+create policy "Allow admins to update orders"
+  on public.orders for update
+  using (
+    exists (
+      select 1 from public.profiles
+      where profiles.id = auth.uid()
+      and profiles.is_admin = true
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.profiles
+      where profiles.id = auth.uid()
+      and profiles.is_admin = true
+    )
+  );
+
+
+
 
 

@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Plus, Edit2, Trash2, ArrowLeft, AlertCircle, Sparkles, Check, Image as ImageIcon } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Plus, Edit2, Trash2, ArrowLeft, AlertCircle, Sparkles, Check, Image as ImageIcon, Calendar, ChevronDown, ChevronUp, Package } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { Product } from "./ProductGrid";
 
@@ -13,6 +13,30 @@ interface AdminPortalProps {
   onRefreshFaqs: () => Promise<void>;
 }
 
+interface OrderItem {
+  id: string;
+  product_id: number;
+  name: string;
+  price: number;
+  image: string;
+  category: string;
+  quantity: number;
+}
+
+interface Order {
+  id: string;
+  created_at: string;
+  customer_name: string;
+  customer_email: string;
+  shipping_address: any;
+  subtotal: number;
+  shipping_cost: number;
+  total: number;
+  status: string;
+  payment_method: string;
+  order_items?: OrderItem[];
+}
+
 export default function AdminPortal({
   products,
   onBack,
@@ -20,7 +44,7 @@ export default function AdminPortal({
   faqs,
   onRefreshFaqs,
 }: AdminPortalProps) {
-  const [activeTab, setActiveTab] = useState<"catalog" | "faqs">("catalog");
+  const [activeTab, setActiveTab] = useState<"catalog" | "faqs" | "orders">("catalog");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   
@@ -38,6 +62,11 @@ export default function AdminPortal({
   const [faqQuestion, setFaqQuestion] = useState("");
   const [faqAnswer, setFaqAnswer] = useState("");
   const [faqDisplayOrder, setFaqDisplayOrder] = useState("1");
+
+  // Orders states
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -163,6 +192,77 @@ export default function AdminPortal({
     }
   };
 
+  const fetchOrders = async () => {
+    setOrdersLoading(true);
+    setError(null);
+    try {
+      const { data, error } = await supabase
+        .from("orders")
+        .select(`
+          id,
+          created_at,
+          customer_name,
+          customer_email,
+          shipping_address,
+          subtotal,
+          shipping_cost,
+          total,
+          status,
+          payment_method,
+          order_items (
+            id,
+            product_id,
+            name,
+            price,
+            image,
+            category,
+            quantity
+          )
+        `)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      if (data) {
+        setOrders(data as Order[]);
+      }
+    } catch (err: any) {
+      console.error("Error fetching orders:", err);
+      setError(err.message || "Failed to load orders from database.");
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+
+  const handleStatusChange = async (orderId: string, newStatus: string) => {
+    setLoading(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({ status: newStatus })
+        .eq("id", orderId);
+
+      if (error) throw error;
+      setSuccessMsg(`Order status updated to ${newStatus} successfully!`);
+      setOrders((prev) =>
+        prev.map((ord) => (ord.id === orderId ? { ...ord, status: newStatus } : ord))
+      );
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err: any) {
+      console.error("Error updating order status:", err);
+      setError(err.message || "Failed to update order status.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "orders") {
+      fetchOrders();
+    }
+  }, [activeTab]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !price || !category.trim() || !image.trim() || stock === "") {
@@ -273,7 +373,7 @@ export default function AdminPortal({
             </div>
           </div>
           
-          {activeTab === "catalog" ? (
+          {activeTab === "catalog" && (
             <button
               onClick={openAddModal}
               className="flex items-center justify-center gap-2 bg-[#e8702a] hover:bg-[#d2611f] text-white font-semibold text-sm px-5 py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-98 shadow-lg shadow-[#e8702a]/15 shrink-0"
@@ -281,7 +381,8 @@ export default function AdminPortal({
               <Plus size={16} />
               Add New Product
             </button>
-          ) : (
+          )}
+          {activeTab === "faqs" && (
             <button
               onClick={openAddFaqModal}
               className="flex items-center justify-center gap-2 bg-[#e8702a] hover:bg-[#d2611f] text-white font-semibold text-sm px-5 py-3 rounded-xl transition-all hover:scale-[1.02] active:scale-98 shadow-lg shadow-[#e8702a]/15 shrink-0"
@@ -339,6 +440,23 @@ export default function AdminPortal({
           >
             Manage FAQs
             {activeTab === "faqs" && (
+              <span className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-[#e8702a]" />
+            )}
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab("orders");
+              setError(null);
+              setSuccessMsg(null);
+            }}
+            className={`text-sm font-semibold tracking-wider uppercase transition-all pb-2.5 relative ${
+              activeTab === "orders"
+                ? "text-[#e8702a]"
+                : "text-white/40 hover:text-white/70"
+            }`}
+          >
+            Manage Orders
+            {activeTab === "orders" && (
               <span className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-[#e8702a]" />
             )}
           </button>
@@ -510,6 +628,174 @@ export default function AdminPortal({
                     </tbody>
                   </table>
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Render Orders Manager */}
+        {activeTab === "orders" && (
+          <div>
+            {ordersLoading ? (
+              <div className="h-full flex flex-col items-center justify-center space-y-3 py-16">
+                <div className="w-8 h-8 border-2 border-[#e8702a]/30 border-t-[#e8702a] rounded-full animate-spin" />
+                <p className="text-white/40 text-xs tracking-wider">Loading orders...</p>
+              </div>
+            ) : orders.length === 0 ? (
+              <div className="text-center py-20 bg-white/5 border border-white/10 rounded-2xl animate-modal-scale">
+                <Package className="mx-auto text-white/20 mb-4" size={48} />
+                <h3 className="text-lg font-medium text-white/80">No orders found</h3>
+                <p className="text-white/40 text-sm mt-1">Database is empty. Sales will appear here once checked out.</p>
+              </div>
+            ) : (
+              <div className="space-y-4 animate-modal-fade">
+                {orders.map((order) => {
+                  const isExpanded = expandedOrderId === order.id;
+                  const itemsCount = order.order_items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
+                  
+                  return (
+                    <div
+                      key={order.id}
+                      className="border border-white/10 rounded-xl bg-white/[0.02] overflow-hidden transition-all duration-300"
+                    >
+                      {/* Collapsed view header */}
+                      <div
+                        onClick={() => setExpandedOrderId(isExpanded ? null : order.id)}
+                        className="p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between cursor-pointer hover:bg-white/[0.02] transition-all gap-4"
+                      >
+                        <div className="space-y-1.5 flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <span className="text-xs text-white/50 font-mono truncate max-w-[150px] sm:max-w-none">
+                              ID: {order.id}
+                            </span>
+                            <span className="text-white/30">•</span>
+                            <span className="text-xs text-white/80 font-medium truncate">
+                              {order.customer_name} ({order.customer_email})
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center gap-3.5 text-xs text-white/40">
+                            <span className="flex items-center gap-1.5">
+                              <Calendar size={12} />
+                              {new Date(order.created_at).toLocaleDateString("en-IN", {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit"
+                              })}
+                            </span>
+                            <span>•</span>
+                            <span className="flex items-center gap-1.5">
+                              <Package size={12} />
+                              {itemsCount} {itemsCount === 1 ? "item" : "items"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Status override and total */}
+                        <div className="flex items-center justify-between sm:justify-end gap-6" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-3">
+                            <select
+                              value={order.status}
+                              onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                              disabled={loading}
+                              className="bg-white/5 border border-white/10 text-white text-xs font-semibold px-3 py-1.5 rounded-lg outline-none focus:border-[#e8702a] transition-all"
+                            >
+                              <option value="pending" className="bg-[#0e0e0e] text-amber-400 font-semibold">Pending</option>
+                              <option value="paid" className="bg-[#0e0e0e] text-emerald-400 font-semibold">Paid</option>
+                              <option value="shipped" className="bg-[#0e0e0e] text-blue-400 font-semibold">Shipped</option>
+                              <option value="delivered" className="bg-[#0e0e0e] text-[#e8702a] font-semibold">Delivered</option>
+                            </select>
+                          </div>
+
+                          <div className="flex items-center gap-4">
+                            <p className="text-[#e8702a] font-semibold text-base whitespace-nowrap">
+                              ₹{order.total.toLocaleString("en-IN")}
+                            </p>
+                            <button
+                              onClick={() => setExpandedOrderId(isExpanded ? null : order.id)}
+                              className="text-white/40 hover:text-white p-1 transition-colors"
+                            >
+                              {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Expanded order details block */}
+                      {isExpanded && (
+                        <div className="border-t border-white/10 bg-black/40 p-5 space-y-5 animate-modal-scale">
+                          {/* Order Items Table */}
+                          <div className="space-y-3">
+                            <p className="text-[10px] text-white/40 uppercase font-semibold tracking-wider">Line Items</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              {order.order_items?.map((item) => (
+                                <div key={item.id} className="flex gap-4 border border-white/5 rounded-xl p-3 bg-white/[0.01]">
+                                  <div className="w-12 h-16 rounded bg-white/5 overflow-hidden flex-shrink-0 border border-white/10">
+                                    <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                                  </div>
+                                  <div className="flex-1 min-w-0 flex flex-col justify-between text-xs">
+                                    <div>
+                                      <p className="text-white font-medium truncate">{item.name}</p>
+                                      <p className="text-white/45 text-[10px] mt-0.5">{item.category} • Qty: {item.quantity}</p>
+                                    </div>
+                                    <div className="flex items-center justify-between text-white/70">
+                                      <span>₹{item.price.toLocaleString("en-IN")} each</span>
+                                      <span className="font-semibold text-white">₹{(item.price * item.quantity).toLocaleString("en-IN")}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Pricing Breakdown */}
+                          <div className="border-t border-white/5 pt-4 space-y-1.5 text-xs text-white/50 max-w-sm ml-auto">
+                            <div className="flex justify-between">
+                              <span>Subtotal</span>
+                              <span className="text-white/80">₹{order.subtotal.toLocaleString("en-IN")}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Shipping Cost</span>
+                              <span className="text-white/80">{order.shipping_cost === 0 ? "FREE" : `₹${order.shipping_cost}`}</span>
+                            </div>
+                            <div className="flex justify-between text-sm font-semibold text-white pt-1.5 border-t border-white/5">
+                              <span>Order Total</span>
+                              <span className="text-[#e8702a]">₹{order.total.toLocaleString("en-IN")}</span>
+                            </div>
+                          </div>
+
+                          {/* Delivery coordinates and payment method */}
+                          <div className="border-t border-white/5 pt-4 grid grid-cols-1 sm:grid-cols-3 gap-6 text-xs text-white/60">
+                            <div>
+                              <p className="text-[10px] text-white/40 uppercase font-semibold mb-1">Shipping Details</p>
+                              <p className="text-white/80 font-medium">{order.customer_name}</p>
+                              <p className="text-white/60 font-light mt-0.5">{order.shipping_address?.phone || "No phone contact"}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-white/40 uppercase font-semibold mb-1">Delivery Address</p>
+                              <p className="text-white/80 leading-relaxed font-light">
+                                {order.shipping_address?.address},<br />
+                                {order.shipping_address?.city} {order.shipping_address?.zip}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-white/40 uppercase font-semibold mb-1">Transaction Info</p>
+                              <p className="text-white/85">Payment Type: <strong className="text-white">{order.payment_method}</strong></p>
+                              <p className="text-white/50 mt-1 flex flex-wrap gap-1 items-center">
+                                Payment ID: 
+                                <span className="font-mono text-[10px] text-white/70 break-all select-all">
+                                  {order.shipping_address?.razorpay_payment_id || "COD Order"}
+                                </span>
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
